@@ -1,5 +1,5 @@
 require "spec_helper"
-require_relative "../../lib/cert_manager"
+require_relative "../lib/cert_manager"
 
 RSpec.describe CertManager do
   let(:domain) { "example" }

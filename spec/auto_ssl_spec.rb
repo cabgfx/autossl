@@ -1,5 +1,5 @@
 require "spec_helper"
-require_relative "../lib/auto_ssl"
+require_relative "../auto_ssl"
 
 RSpec.describe AutoSSL do
   let(:domain) { "example" }
