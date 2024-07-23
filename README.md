@@ -2,7 +2,7 @@
 
 ## Overview
 
-The SSL Cert Generator is a Ruby-based command-line tool designed to automate the creation of self-signed SSL certificates for local development environments. By leveraging OpenSSL and the Thor gem, this tool simplifies the process of generating private keys, Certificate Signing Requests (CSRs), and SSL certificates, adhering to a consistent format for subdomains.
+AutoSSL is a Ruby-based command-line tool designed to automate the creation of self-signed SSL certificates for local development environments. By leveraging OpenSSL and the Thor gem, this tool simplifies the process of generating private keys, Certificate Signing Requests (CSRs), and SSL certificates, adhering to a consistent format for subdomains.
 
 ## Features
 
@@ -15,7 +15,7 @@ The SSL Cert Generator is a Ruby-based command-line tool designed to automate th
 
 - Ruby 3.1 or higher
 - OpenSSL installed on your system
-- A pre-existing local CA (Certificate Authority)
+- A pre-existing local CA (Certificate Authority) *— NOTE: This a temporary requirement, just to get v.0.1 out there — AutoSSL will soon handle this step, too.*
 
 ## Installation
 
