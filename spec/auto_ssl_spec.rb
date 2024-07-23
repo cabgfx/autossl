@@ -1,16 +1,28 @@
 require "spec_helper"
 require_relative "../auto_ssl"
+require "yaml"
 
 RSpec.describe AutoSSL do
   let(:domain) { "example" }
   let(:tld) { "com" }
   let(:site) { "dev.#{domain}.#{tld}" }
   let(:ssl_dir) { File.expand_path("~/ssl") }
+  let(:ca_file) { "/path/to/cabCA.pem" }
+  let(:ca_key) { "/path/to/cabCA.key" }
+  let(:config_file) { File.expand_path("../../.autosslrc", __dir__) }
+
+  before do
+    # Mock the system calls to OpenSSL to avoid actual key generation
+    allow_any_instance_of(CertManager).to receive(:system).and_return(true)
+  end
+
+  after do
+    File.delete(config_file) if File.exist?(config_file)
+  end
 
   describe "generate" do
     before do
-      # Mock the system calls to OpenSSL to avoid actual key generation
-      allow_any_instance_of(CertManager).to receive(:system).and_return(true)
+      File.write(config_file, {"ca_file" => ca_file, "ca_key" => ca_key}.to_yaml)
     end
 
     it "generates a private key" do
@@ -43,6 +55,29 @@ RSpec.describe AutoSSL do
     it "generates a certificate" do
       expect_any_instance_of(CertManager).to receive(:generate_certificate)
       AutoSSL.start(["generate", domain, tld])
+    end
+  end
+
+  describe "init" do
+    it "creates a new configuration file" do
+      allow_any_instance_of(Thor::Shell::Basic).to receive(:ask).and_return(ca_file, ca_key)
+
+      expect { AutoSSL.start(["init"]) }.to output(/Configuration saved to .autosslrc/).to_stdout
+
+      config = YAML.load_file(config_file)
+      expect(config["ca_file"]).to eq(ca_file)
+      expect(config["ca_key"]).to eq(ca_key)
+    end
+
+    it "updates an existing configuration file" do
+      File.write(config_file, {"ca_file" => "old_ca.pem", "ca_key" => "old_ca.key"}.to_yaml)
+      allow_any_instance_of(Thor::Shell::Basic).to receive(:ask).and_return(ca_file, ca_key)
+
+      expect { AutoSSL.start(["init"]) }.to output(/Configuration saved to .autosslrc/).to_stdout
+
+      config = YAML.load_file(config_file)
+      expect(config["ca_file"]).to eq(ca_file)
+      expect(config["ca_key"]).to eq(ca_key)
     end
   end
 end

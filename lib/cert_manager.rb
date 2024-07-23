@@ -1,8 +1,10 @@
 require "fileutils"
 
 class CertManager
-  def initialize(site)
+  def initialize(site, ca_file, ca_key)
     @site = site
+    @ca_file = ca_file
+    @ca_key = ca_key
   end
 
   def generate_certificates
@@ -39,6 +41,6 @@ class CertManager
   end
 
   def generate_certificate
-    system("openssl x509 -req -in #{@site}.csr -CA cabCA.pem -CAkey cabCA.key -CAcreateserial -out #{@site}.crt -days 825 -sha256 -extfile #{@site}.ext")
+    system("openssl x509 -req -in #{@site}.csr -CA #{@ca_file} -CAkey #{@ca_key} -CAcreateserial -out #{@site}.crt -days 825 -sha256 -extfile #{@site}.ext")
   end
 end

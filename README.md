@@ -2,7 +2,9 @@
 
 ## Overview
 
-AutoSSL is a Ruby-based command-line tool designed to automate the creation of self-signed SSL certificates for local development environments. By leveraging OpenSSL and the Thor gem, this tool simplifies the process of generating private keys, Certificate Signing Requests (CSRs), and SSL certificates, adhering to a consistent format for subdomains.
+AutoSSL is a Ruby-based command-line tool designed to automate the creation of
+
+ self-signed SSL certificates for local development environments. By leveraging OpenSSL and the Thor gem, this tool simplifies the process of generating private keys, Certificate Signing Requests (CSRs), and SSL certificates, adhering to a consistent format for subdomains.
 
 ## Features
 
@@ -32,6 +34,18 @@ AutoSSL is a Ruby-based command-line tool designed to automate the creation of s
 
 ## Usage
 
+### Initializing Configuration
+
+To set up AutoSSL configuration, run:
+
+```bash
+ruby auto_ssl.rb init
+```
+
+This will prompt you for the paths to the CA .pem file and CA .key file and save them in a `.autosslrc` file in the current directory.
+
+### Generating Certificates
+
 Navigate to the directory where you have cloned the repository and run the script using the following syntax:
 
 ```bash
@@ -44,6 +58,12 @@ For example, to generate a certificate for `dev.example.com`:
 ruby auto_ssl.rb generate example com
 ```
 
+Alternatively, you can override the CA .pem file and CA .key file specified in `.autosslrc` using command-line options:
+
+```bash
+ruby auto_ssl.rb generate DOMAIN TLD --ca_file PATH_TO_CA_FILE --ca_key PATH_TO_CA_KEY
+```
+
 ## Directory Structure
 
 ```
@@ -54,7 +74,8 @@ auto_ssl/
 ├── spec/
 │   ├── spec_helper.rb
 │   ├── auto_ssl_spec.rb
-│   └── cert_manager_spec.rb
+│   └── lib/
+│       └── cert_manager_spec.rb
 ├── auto_ssl.rb
 ├── README.md
 └── LICENSE
@@ -91,8 +112,6 @@ auto_ssl/
     ```bash
     openssl x509 -req -in dev.example.com.csr -CA <yourCA>.pem -CAkey <yourCA>.key -CAcreateserial -out dev.example.com.crt -days 825 -sha256 -extfile dev.example.com.ext
     ```
-
-
 
 ## Configuration
 
