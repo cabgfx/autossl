@@ -1,4 +1,4 @@
-# AutoSSL — local SSL Certificate Generator
+# AutoSSL
 
 ## Overview
 
@@ -15,7 +15,7 @@ AutoSSL is a Ruby-based command-line tool designed to automate the creation of s
 
 - Ruby 3.1 or higher
 - OpenSSL installed on your system
-- A pre-existing local CA (Certificate Authority) *— NOTE: This a temporary requirement, just to get v.0.1 out there — AutoSSL will soon handle this step, too.*
+- A pre-existing local CA (Certificate Authority) *— NOTE: This a temporary requirement, to allow v.0.1 to ship — soon, AutoSSL handles this step, too.*
 
 ## Installation
 
@@ -26,8 +26,8 @@ AutoSSL is a Ruby-based command-line tool designed to automate the creation of s
 
 2. Clone this repository:
     ```bash
-    git clone https://github.com/yourusername/ssl-cert-generator.git
-    cd ssl-cert-generator
+    git clone https://github.com/yourusername/auto_ssl.git
+    cd auto_ssl
     ```
 
 ## Usage
@@ -35,21 +35,27 @@ AutoSSL is a Ruby-based command-line tool designed to automate the creation of s
 Navigate to the directory where you have cloned the repository and run the script using the following syntax:
 
 ```bash
-ruby ssl_cert_generator.rb generate DOMAIN TLD
+ruby auto_ssl.rb generate DOMAIN TLD
 ```
 
 For example, to generate a certificate for `dev.example.com`:
 
 ```bash
-ruby ssl_cert_generator.rb generate example com
+ruby auto_ssl.rb generate example com
 ```
 
 ## Directory Structure
 
 ```
-ssl-cert-generator/
+auto_ssl/
 │
-├── ssl_cert_generator.rb
+├── lib/
+│   └── cert_manager.rb
+├── spec/
+│   ├── spec_helper.rb
+│   ├── auto_ssl_spec.rb
+│   └── cert_manager_spec.rb
+├── auto_ssl.rb
 ├── README.md
 └── LICENSE
 ```
@@ -86,8 +92,7 @@ ssl-cert-generator/
     openssl x509 -req -in dev.example.com.csr -CA <yourCA>.pem -CAkey <yourCA>.key -CAcreateserial -out dev.example.com.crt -days 825 -sha256 -extfile dev.example.com.ext
     ```
 
-5. **Move Generated Files:**
-    - Moves the generated `.key` and `.crt` files to a designated directory (default: `~/project/ssl`).
+
 
 ## Configuration
 

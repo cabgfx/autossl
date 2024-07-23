@@ -1,16 +1,4 @@
-require "thor"
 require "fileutils"
-
-class SSLCertGenerator < Thor
-  desc "generate DOMAIN TLD", "Generates a self-signed SSL certificate for the given DOMAIN and TLD"
-
-  def generate(domain, tld)
-    site = "dev.#{domain}.#{tld}"
-
-    CertManager.new(site).generate_certificates
-    CertMover.new(site).move_certificates
-  end
-end
 
 class CertManager
   def initialize(site)
@@ -54,20 +42,3 @@ class CertManager
     system("openssl x509 -req -in #{@site}.csr -CA cabCA.pem -CAkey cabCA.key -CAcreateserial -out #{@site}.crt -days 825 -sha256 -extfile #{@site}.ext")
   end
 end
-
-class CertMover
-  def initialize(site)
-    @site = site
-  end
-
-  def move_certificates
-    project_ssl_dir = File.expand_path("~/project/ssl")
-    FileUtils.mkdir_p(project_ssl_dir) unless Dir.exist?(project_ssl_dir)
-    FileUtils.mv("#{@site}.key", "#{project_ssl_dir}/#{@site}.key")
-    FileUtils.mv("#{@site}.crt", "#{project_ssl_dir}/#{@site}.crt")
-
-    puts "Generated and moved #{@site}.key and #{@site}.crt to #{project_ssl_dir}"
-  end
-end
-
-SSLCertGenerator.start(ARGV)
