@@ -1,305 +1,161 @@
 # AutoSSL
 
-AutoSSL is a Ruby-based command-line tool designed to automate the creation of self-signed SSL certificates for local development environments. By simplifying the SSL certificate generation process, AutoSSL enables developers to set up secure local servers with ease, enhancing both development workflows and testing environments.
-
-## Table of Contents
-
-- [Features](#features)
-- [Prerequisites](#prerequisites)
-- [Installation](#installation)
-- [Configuration](#configuration)
-- [Usage](#usage)
-  - [Initializing Configuration](#initializing-configuration)
-  - [Generating SSL Certificates](#generating-ssl-certificates)
-- [Directory Structure](#directory-structure)
-- [Testing](#testing)
-- [Contributing](#contributing)
-- [License](#license)
+A secure, cross-platform tool for generating self-signed SSL certificates with proper domain validation.
 
 ## Features
 
-- **Automated Certificate Generation**: Quickly generate private keys, CSRs, extension files, and self-signed SSL certificates.
-- **Configurable Paths**: Customize paths to Certificate Authority (CA) files and SSL directories.
-- **Interactive Setup**: Easy initialization of configuration through interactive prompts.
-- **RSpec Integration**: Comprehensive test suite ensuring reliability and stability.
-- **Thor Integration**: Utilizes the Thor gem for robust command-line interface management.
+- 🔒 Secure certificate generation with OpenSSL
+- 🌍 Cross-platform support (macOS and Linux)
+- 🏠 XDG Base Directory compliance
+- 🛡️ Comprehensive security measures
+- 🔐 Safe configuration management
+- 📁 Platform-appropriate file storage
 
 ## Prerequisites
 
-- **Ruby**: Ensure you have Ruby installed (version 2.5 or higher is recommended).
-- **OpenSSL**: Required for generating keys, CSRs, and certificates.
-- **Bundler**: To manage Ruby gem dependencies.
+- Ruby 2.6 or higher
+- OpenSSL (system installation or via package manager)
+- Write permissions for config directory
 
 ## Installation
 
-1. **Clone the Repository**
+```bash
+gem install auto_ssl
+```
 
-   ```bash
-   git clone https://github.com/yourusername/auto_ssl.git
-   cd auto_ssl
-   ```
+## Quick Start
 
-2. **Install Dependencies**
+1. Initialize configuration:
 
-   Use Bundler to install the necessary Ruby gems:
+```bash
+autossl init
+```
 
-   ```bash
-   bundle install
-   ```
+2. Generate a certificate:
 
-3. **Set Up Executable (Optional)**
+```bash
+autossl generate example com
+```
 
-   To use `auto_ssl` as a global command, you can create a symbolic link:
-
-   ```bash
-   sudo ln -s $(pwd)/auto_ssl.rb /usr/local/bin/auto_ssl
-   chmod +x /usr/local/bin/auto_ssl
-   ```
-
-   > **Note**: Adjust the path `/usr/local/bin/` as needed based on your system.
+This will create a certificate for `dev.example.com`
 
 ## Configuration
 
-AutoSSL uses a YAML configuration file named `.autosslrc` to store paths to the CA files and the SSL directory. This configuration can be initialized and managed using the tool's `init` command.
+AutoSSL stores its configuration in platform-specific locations:
 
-### Initializing Configuration
+- **Linux**: `~/.config/autossl/config.yml`
+- **macOS**: `~/Library/Application Support/autossl/config.yml`
+- If `XDG_CONFIG_HOME` is set, it will be used instead
 
-Run the following command to create or update the `.autosslrc` file:
+Certificates are stored in:
+- **Linux**: `~/.local/share/autossl/certificates`
+- **macOS**: `~/Library/Application Support/autossl/certificates`
+- If `XDG_DATA_HOME` is set, it will be used instead
 
-```bash
-ruby auto_ssl.rb init
-```
+### Configuration Options
 
-You will be prompted to enter the following details:
+- `ca_file`: Path to your CA certificate file
+- `ca_key`: Path to your CA private key
+- `ssl_dir`: Directory for generated certificates (optional)
 
-1. **Path to the CA File**
+## Security Features
 
-   Enter the absolute path to your CA certificate file (`yourCA.pem`).
+AutoSSL implements several security measures:
 
-2. **Path to the CA Key**
+- Strict path validation and sanitization
+- Secure file operations with proper permissions
+- Protected against path traversal attacks
+- Safe YAML parsing with type verification
+- Validated OpenSSL command execution
+- Atomic file operations
 
-   Enter the absolute path to your CA key file (`yourCA.key`).
+## Command Reference
 
-3. **Path to the SSL Directory**
-
-   Specify the directory where SSL certificates will be stored (default is `./build`).
-
-#### Example Interaction
-
-```
-Enter the path to the CA file: /home/user/CA/yourCA.pem
-Enter the path to the CA key: /home/user/CA/yourCA.key
-Enter the path to the SSL directory: ./build
-Configuration saved to .autosslrc
-```
-
-### Example `.autosslrc` Configuration
-
-```yaml
-ca_file: "/home/user/CA/yourCA.pem"
-ca_key: "/home/user/CA/yourCA.key"
-ssl_dir: "./build"
-```
-
-> **Best Practices**:
->
-> - Use absolute paths to avoid ambiguities related to the current working directory.
-> - Ensure that the CA files (`.pem` and `.key`) are secured and have appropriate permissions.
-
-## Usage
-
-AutoSSL provides two primary commands: `init` and `generate`. Below are detailed instructions and examples for each.
-
-### Initializing Configuration
-
-Before generating SSL certificates, initialize the configuration using the `init` command:
+### Initialize Configuration
 
 ```bash
-ruby auto_ssl.rb init
+autossl init
 ```
 
-This command sets up the `.autosslrc` file with the necessary paths.
+This interactive command will:
+1. Create necessary directories with secure permissions
+2. Guide you through configuration setup
+3. Validate all provided paths
+4. Store configuration securely
 
-### Generating SSL Certificates
-
-Use the `generate` command to create SSL certificates for your desired domain and top-level domain (TLD).
-
-#### Command Syntax
+### Generate Certificate
 
 ```bash
-ruby auto_ssl.rb generate DOMAIN TLD [options]
+autossl generate DOMAIN TLD [options]
 ```
 
-#### Parameters
+Options:
+- `--ca-file PATH`: Override CA certificate file location
+- `--ca-key PATH`: Override CA private key location
+- `--ssl-dir PATH`: Override certificate output directory
 
-- `DOMAIN`: The subdomain for which the SSL certificate will be generated (e.g., `example`).
-- `TLD`: The top-level domain (e.g., `com`, `local`).
-
-#### Options
-
-- `--ca_file`: Override the CA file path specified in `.autosslrc`.
-- `--ca_key`: Override the CA key path specified in `.autosslrc`.
-- `--ssl_dir`: Override the SSL directory path specified in `.autosslrc`.
-
-#### Examples
-
-1. **Basic Certificate Generation**
-
-   Generate an SSL certificate for `dev.example.com` using the paths specified in `.autosslrc`:
-
-   ```bash
-   ruby auto_ssl.rb generate example com
-   ```
-
-2. **Overriding Configuration Paths**
-
-   Generate an SSL certificate while specifying custom CA files and SSL directory:
-
-   ```bash
-   ruby auto_ssl.rb generate example com --ca_file /custom/path/yourCA.pem --ca_key /custom/path/yourCA.key --ssl_dir ./custom_build
-   ```
-
-#### Output
-
-Upon successful execution, the following files will be generated in the specified SSL directory (`ssl_dir`):
-
-- `dev.example.com.key`: Private key.
-- `dev.example.com.csr`: Certificate Signing Request.
-- `dev.example.com.ext`: Extension configuration file.
-- `dev.example.com.crt`: Self-signed SSL certificate.
-
-#### Example Command Execution
+Example:
 
 ```bash
-ruby auto_ssl.rb generate example com
+autossl generate myapp dev --ssl-dir /custom/path/certs
 ```
 
-```
-Generating private key...
-Generating CSR...
-Creating extension file...
-Generating self-signed certificate...
-Certificates generated successfully in ./build
-```
+## File Permissions
 
-## Directory Structure
+AutoSSL enforces secure file permissions:
+- Configuration files: `0600` (user read/write only)
+- Certificate files: `0600` (user read/write only)
+- Directories: `0700` (user read/write/execute only)
 
-Here's an overview of the project's directory structure:
+Ensure your CA files have appropriate permissions before use.
 
-```
-auto_ssl/
-├── lib/
-│   └── cert_manager.rb          # Handles SSL certificate generation logic
-├── spec/
-│   ├── cert_manager_spec.rb     # Tests for CertManager
-│   ├── auto_ssl_spec.rb         # Tests for AutoSSL
-│   └── spec_helper.rb           # RSpec configuration
-├── .autosslrc                   # YAML configuration file
-├── .gitignore                   # Git ignore rules
-├── .ruby-version                # Specifies Ruby version
-├── .rspec                       # RSpec configuration
-├── Gemfile                      # Ruby gem dependencies
-├── LICENSE                      # License information
-├── README.md                    # Project documentation
-└── auto_ssl.rb                  # Main executable script
-```
+## Troubleshooting
 
-## Testing
+### Common Issues
 
-AutoSSL includes a comprehensive test suite using RSpec to ensure reliability and correctness of its functionalities.
+1. **OpenSSL not found**
+   - Ensure OpenSSL is installed
+   - Check if OpenSSL is in your PATH
+   - Supported locations:
+     - `/usr/bin/openssl`
+     - `/usr/local/bin/openssl`
+     - `/opt/homebrew/bin/openssl` (Apple Silicon)
+     - Custom locations via PATH
 
-### Running Tests
+2. **Permission Denied**
+   - Check file/directory ownership
+   - Verify required permissions
+   - Ensure parent directories are writable
 
-1. **Ensure Dependencies Are Installed**
+3. **Configuration Issues**
+   - Run `autossl init` to reset configuration
+   - Check file permissions
+   - Verify paths exist and are accessible
 
-   If not already done, install the dependencies using Bundler:
+### Error Messages
 
-   ```bash
-   bundle install
-   ```
+- "CA file and CA key must be specified": Run `autossl init` to configure
+- "Invalid domain": Domain contains invalid characters
+- "Path escapes base directory": Attempted path traversal detected
+- "Could not find OpenSSL executable": OpenSSL not in expected locations
 
-2. **Execute the Test Suite**
+## Migration from Previous Versions
 
-   Run the following command from the project's root directory:
+If upgrading from a version before 1.0.0:
 
-   ```bash
-   bundle exec rspec
-   ```
-
-### Test Coverage
-
-The test suite covers the following aspects:
-
-- **AutoSSL Command-Line Interface (`auto_ssl_spec.rb`)**
-  - Initialization of configuration.
-  - Generation of SSL certificates.
-  - Handling of command-line options and arguments.
-
-- **Certificate Manager (`cert_manager_spec.rb`)**
-  - Generation of private keys, CSRs, extension files, and certificates.
-  - File creation and content verification.
+1. Configuration files have moved to new locations
+2. Run `autossl init` to migrate existing configuration
+3. Update any scripts referencing old config locations
+4. Verify file permissions match new requirements
 
 ## Contributing
 
-Contributions are welcome! Whether it's bug reports, feature requests, or pull requests, your input helps improve AutoSSL.
-
-### How to Contribute
-
-1. **Fork the Repository**
-
-   Click the "Fork" button on the repository page to create your own copy.
-
-2. **Clone Your Fork**
-
-   ```bash
-   git clone https://github.com/yourusername/auto_ssl.git
-   cd auto_ssl
-   ```
-
-3. **Create a New Branch**
-
-   ```bash
-   git checkout -b feature/your-feature-name
-   ```
-
-4. **Make Your Changes**
-
-   Implement your feature or fix.
-
-5. **Commit Your Changes**
-
-   ```bash
-   git commit -m "Add feature: your feature description"
-   ```
-
-6. **Push to Your Fork**
-
-   ```bash
-   git push origin feature/your-feature-name
-   ```
-
-7. **Submit a Pull Request**
-
-   Navigate to the original repository and create a pull request from your fork.
-
-### Code of Conduct
-
-Please adhere to the [Code of Conduct](LICENSE) when contributing to this project.
+Contributions are welcome! Please read our contributing guidelines and submit pull requests.
 
 ## License
 
-AutoSSL is released under the [MIT License](LICENSE). See the [LICENSE](LICENSE) file for more details.
+This project is licensed under the MIT License - see the LICENSE file for details.
 
----
+## Acknowledgments
 
-&copy; Casper Klenz-Kitenge. All rights reserved.
-
-# Acknowledgements
-
-- [Thor Gem](https://github.com/erikhuda/thor) for command-line interface management.
-- [OpenSSL](https://www.openssl.org/) for SSL certificate generation.
-- [RSpec](https://rspec.info/) for testing framework.
-
----
-
-*Feel free to reach out for support or with suggestions!*
+This project has been significantly enhanced through the use of Cursor's AI pair programming system, with human oversight and approval.
