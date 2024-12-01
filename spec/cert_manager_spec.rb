@@ -5,14 +5,14 @@ RSpec.describe CertManager do
   let(:domain) { "example" }
   let(:tld) { "com" }
   let(:site) { "dev.#{domain}.#{tld}" }
-  let(:ssl_dir) { File.expand_path("~/ssl") }
-  let(:ca_file) { "/path/to/cabCA.pem" }
-  let(:ca_key) { "/path/to/cabCA.key" }
+  let(:ssl_dir) { YAML.load_file(".autosslrc")["ssl_dir"] }
+  let(:ca_file) { "/path/to/yourCA.pem" }
+  let(:ca_key) { "/path/to/yourCA.key" }
 
   before do
     # Mock the system calls to OpenSSL to avoid actual key generation
     allow_any_instance_of(CertManager).to receive(:system).and_return(true)
-    @cert_manager = CertManager.new(site, ca_file, ca_key)
+    @cert_manager = CertManager.new(site, ca_file, ca_key, ssl_dir)
   end
 
   describe "#generate_private_key" do

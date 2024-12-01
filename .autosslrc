@@ -1,3 +1,0 @@
----
-ca_file: "/path/to/cabCA.pem"
-ca_key: "/path/to/cabCA.key"

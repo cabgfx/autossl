@@ -1,38 +1,95 @@
 require "thor"
 require "yaml"
 require_relative "lib/cert_manager"
+require_relative "lib/safe_path"
+require_relative "lib/secure_yaml"
+require "rbconfig"
 
 class AutoSSL < Thor
-  CONFIG_FILE = ".autosslrc"
+  class Error < StandardError; end
+
+  # Platform-aware configuration paths
+  def self.config_home
+    case RbConfig::CONFIG["host_os"]
+    when /darwin/
+      # macOS follows XDG spec if set, otherwise uses ~/Library/Application Support
+      ENV.fetch("XDG_CONFIG_HOME") do
+        File.expand_path("~/Library/Application Support")
+      end
+    else
+      # Linux and others follow XDG spec
+      ENV.fetch("XDG_CONFIG_HOME") do
+        File.expand_path("~/.config")
+      end
+    end
+  end
+
+  def self.data_home
+    case RbConfig::CONFIG["host_os"]
+    when /darwin/
+      # macOS follows XDG spec if set, otherwise uses ~/Library/Application Support
+      ENV.fetch("XDG_DATA_HOME") do
+        File.expand_path("~/Library/Application Support")
+      end
+    else
+      # Linux and others follow XDG spec
+      ENV.fetch("XDG_DATA_HOME") do
+        File.expand_path("~/.local/share")
+      end
+    end
+  end
+
+  # Application paths
+  CONFIG_FILE = File.join(config_home, "autossl/config.yml")
+  DEFAULT_SSL_DIR = File.join(data_home, "autossl/certificates")
 
   desc "generate DOMAIN TLD", "Generates a self-signed SSL certificate for the given DOMAIN and TLD"
-  option :ca_file, type: :string, desc: "Path to the CA .pem file"
-  option :ca_key, type: :string, desc: "Path to the CA .key file"
-
+  option :ca_file, type: :string, desc: "Path to the CA file"
+  option :ca_key, type: :string, desc: "Path to the CA key"
+  option :ssl_dir, type: :string, desc: "Path to the SSL directory"
   def generate(domain, tld)
-    config = load_config
+    validate_input!(domain, tld)
 
-    ca_file = options[:ca_file] || config["ca_file"]
-    ca_key = options[:ca_key] || config["ca_key"]
+    begin
+      config = load_config
 
-    if ca_file.nil? || ca_key.nil?
-      puts "CA .pem file and CA .key file must be specified either in .autosslrc or as command-line options."
-      exit(1)
+      ca_file = resolve_path(options[:ca_file] || config["ca_file"], "CA file")
+      ca_key = resolve_path(options[:ca_key] || config["ca_key"], "CA key")
+      ssl_dir = resolve_path(options[:ssl_dir] || config["ssl_dir"] || DEFAULT_SSL_DIR, "SSL directory")
+
+      site = "dev.#{domain}.#{tld}"
+      cert_manager = CertManager.new(site, ca_file, ca_key, ssl_dir)
+      cert_manager.generate_certificates
+
+      puts "Successfully generated certificates for #{site} in #{ssl_dir}"
+    rescue => e
+      error_message = "Certificate generation failed: #{e.message}"
+      raise Thor::Error, error_message
     end
-
-    site = "dev.#{domain}.#{tld}"
-    CertManager.new(site, ca_file, ca_key).generate_certificates
   end
 
   desc "init", "Initialize the AutoSSL configuration"
   def init
-    config = File.exist?(CONFIG_FILE) ? YAML.load_file(CONFIG_FILE) : {}
+    ensure_config_directory
+    config = load_config
 
-    config["ca_file"] = ask("Enter the path to the CA .pem file:", default: config["ca_file"])
-    config["ca_key"] = ask("Enter the path to the CA .key file:", default: config["ca_key"])
+    config["ca_file"] = ask_path("Enter the path to the CA file:", default: config["ca_file"])
+    config["ca_key"] = ask_path("Enter the path to the CA key:", default: config["ca_key"])
+    config["ssl_dir"] = ask_path("Enter the path to the SSL directory:", default: config["ssl_dir"] || DEFAULT_SSL_DIR)
 
-    File.write(CONFIG_FILE, config.to_yaml)
+    # Validate all paths before saving
+    validate_config!(config)
+
+    # Ensure SSL directory exists with proper permissions
+    SafePath.secure_mkdir(config["ssl_dir"], mode: 0o700)
+
+    # Save configuration
+    save_config(config)
+
     puts "Configuration saved to #{CONFIG_FILE}"
+  rescue => e
+    error_message = "Configuration failed: #{e.message}"
+    raise Thor::Error, error_message
   end
 
   def self.exit_on_failure?
@@ -41,9 +98,72 @@ class AutoSSL < Thor
 
   private
 
+  def validate_input!(domain, tld)
+    unless domain.match?(/\A[a-z0-9][a-z0-9-]*[a-z0-9]\z/i)
+      raise Error, "Invalid domain: #{domain}"
+    end
+
+    unless tld.match?(/\A[a-z]{2,}\z/i)
+      raise Error, "Invalid TLD: #{tld}"
+    end
+  end
+
+  def resolve_path(path, description)
+    return nil if path.nil?
+
+    expanded_path = File.expand_path(path)
+    unless File.exist?(expanded_path)
+      raise Error, "#{description} not found: #{path}"
+    end
+
+    expanded_path
+  end
+
+  def ask_path(prompt, default: nil)
+    path = ask(prompt, default: default)
+    return nil if path.empty?
+
+    # Expand path and handle ~
+    File.expand_path(path)
+  end
+
+  def ensure_config_directory
+    config_dir = File.dirname(CONFIG_FILE)
+    SafePath.secure_mkdir(config_dir, mode: 0o700)
+  end
+
   def load_config
     return {} unless File.exist?(CONFIG_FILE)
-    YAML.load_file(CONFIG_FILE)
+
+    begin
+      SecureYAML.load_file(CONFIG_FILE)
+    rescue => e
+      raise Error, "Failed to load config: #{e.message}"
+    end
+  end
+
+  def save_config(config)
+    SecureYAML.dump(config, CONFIG_FILE, mode: 0o600)
+  end
+
+  def validate_config!(config)
+    ["ca_file", "ca_key", "ssl_dir"].each do |key|
+      next if config[key].nil?
+
+      path = config[key]
+      case key
+      when "ca_file", "ca_key"
+        unless File.file?(path) && File.readable?(path)
+          raise Error, "#{key.tr("_", " ").capitalize} is not accessible: #{path}"
+        end
+      when "ssl_dir"
+        # Directory will be created if it doesn't exist
+        parent_dir = File.dirname(path)
+        unless File.directory?(parent_dir) && File.writable?(parent_dir)
+          raise Error, "Parent directory for SSL directory is not writable: #{parent_dir}"
+        end
+      end
+    end
   end
 end
 
