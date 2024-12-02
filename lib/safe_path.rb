@@ -19,7 +19,8 @@ module SafePath
   MAX_SYMLINK_DEPTH = 8
   SECURE_DIRECTORY_MODE = 0o700
   SECURE_FILE_MODE = 0o600
-  ALLOWED_CHARACTERS = /\A[a-zA-Z0-9\-_.]+\z/.freeze
+  ALLOWED_CHARACTERS = /\A(?!\.)[a-zA-Z0-9][a-zA-Z0-9\-_.]*\z/.freeze
+  PATH_SEPARATORS = [File::SEPARATOR, File::ALT_SEPARATOR].compact.freeze
 
   class << self
     def logger
@@ -103,11 +104,21 @@ module SafePath
       end
 
       # Validate path components
-      path_components = expanded_path.split(File::SEPARATOR)
+      path_components = expanded_path.split(Regexp.union(*PATH_SEPARATORS))
       path_components.each do |component|
         next if component.empty?
         unless component.match?(ALLOWED_CHARACTERS)
-          raise SecurityError, "Invalid characters in path component: #{component}"
+          raise SecurityError, "Invalid characters or pattern in path component: #{component}"
+        end
+      end
+
+      # Additional platform-specific validation
+      if Gem.win_platform?
+        if expanded_path.match?(/\A[A-Za-z]:\\/i)
+          drive_letter = expanded_path[0].upcase
+          unless drive_letter == ENV['SystemDrive'][0]
+            raise SecurityError, "Access denied to drive #{drive_letter}:"
+          end
         end
       end
 
