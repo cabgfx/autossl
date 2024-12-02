@@ -257,4 +257,4 @@ MIT License - see LICENSE file for details.
 
 ## Acknowledgments
 
-This project implements industrial-grade safety measures through the use of Cursor's AI pair programming system, with rigorous human oversight and validation.
+This project implements industrial-grade safety measures through the use of Cursor's AI pair programming system.
