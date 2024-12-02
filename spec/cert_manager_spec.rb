@@ -1,155 +1,135 @@
-require "spec_helper"
-require_relative "../lib/cert_manager"
-require "tmpdir"
-require "pathname"
+require 'spec_helper'
+require 'cert_manager'
+require 'fileutils'
+require 'securerandom'
 
 RSpec.describe CertManager do
-  let(:domain) { "example.com" }
-  let(:site) { "dev.#{domain}" }
-  let(:temp_dir) { Pathname.new(Dir.mktmpdir).realpath.to_s }
-  let(:ssl_dir) { File.join(temp_dir, "ssl") }
-  let(:ca_file) { File.join(temp_dir, "ca.pem") }
-  let(:ca_key) { File.join(temp_dir, "ca.key") }
+  let(:secure_tmpdir) { Dir.mktmpdir(["certmanager_test_", SecureRandom.hex(8)]) }
+  let(:ssl_dir) { File.join(secure_tmpdir, 'ssl') }
+  let(:domain) { 'example' }
+  let(:tld) { 'com' }
+  let(:site) { "#{domain}.#{tld}" }
+  let(:cert_manager) { described_class.new(site, ssl_dir: ssl_dir) }
 
-  subject(:cert_manager) { described_class.new(site, ca_file, ca_key, ssl_dir) }
-
-  before do
-    # Create test CA files
-    FileUtils.mkdir_p(File.dirname(ca_file))
-    File.write(ca_file, "test ca content")
-    File.write(ca_key, "test key content")
-    File.chmod(0o600, ca_file)
-    File.chmod(0o600, ca_key)
-
-    # Create ssl directory with proper permissions
+  before(:each) do
     FileUtils.mkdir_p(ssl_dir, mode: 0o700)
 
-    # Mock OpenSSL commands
-    allow(SecureCommand).to receive(:openssl) do |*args, **kwargs|
-      # Create a dummy file if it's a command that generates output
-      if args.include?("-out")
-        out_file = args[args.index("-out") + 1]
-        out_path = kwargs[:working_dir] ? File.join(kwargs[:working_dir], out_file) : out_file
-        FileUtils.touch(out_path)
-        File.chmod(0o600, out_path)
-      end
-      true
-    end
+    # Mock SafetyChecks
+    allow(SafetyChecks).to receive(:check_system_resources).and_return(true)
+    allow(SafetyChecks).to receive(:validate_available_space!).and_return(true)
   end
 
-  after do
-    # Clean up temp directory safely
-    if Dir.exist?(temp_dir)
-      begin
-        real_temp = Pathname.new(temp_dir).realpath.to_s
-        real_tmpdir = Pathname.new(Dir.tmpdir).realpath.to_s
+  after(:each) do
+    FileUtils.remove_entry_secure(secure_tmpdir) if File.directory?(secure_tmpdir)
+  end
 
-        if real_temp.start_with?(real_tmpdir)
-          FileUtils.remove_entry(temp_dir)
-        else
-          warn "Warning: Not removing directory that's outside tmp: #{temp_dir}"
+  describe 'Certificate Generation' do
+    context 'with valid inputs' do
+      it 'generates a complete certificate set' do
+        expect { cert_manager.generate_certificates }.not_to raise_error
+
+        expect(File.exist?(File.join(ssl_dir, "#{site}.key"))).to be true
+        expect(File.exist?(File.join(ssl_dir, "#{site}.csr"))).to be true
+        expect(File.exist?(File.join(ssl_dir, "#{site}.crt"))).to be true
+
+        # Verify permissions
+        Dir.glob(File.join(ssl_dir, '*')).each do |file|
+          expect(File.stat(file).mode & 0o777).to eq(0o600)
         end
-      rescue => e
-        warn "Warning: Failed to clean up temp directory #{temp_dir}: #{e.message}"
+      end
+
+      it 'handles resource exhaustion gracefully' do
+        allow(SafetyChecks).to receive(:check_system_resources)
+          .and_raise(SafetyChecks::ResourceError, "Low memory")
+
+        expect { cert_manager.generate_certificates }
+          .to raise_error(CertManager::GenerationError, /system resources/)
+      end
+    end
+
+    context 'with security violations' do
+      it 'detects insecure SSL directory permissions' do
+        FileUtils.chmod(0o777, ssl_dir)
+        expect { cert_manager.generate_certificates }
+          .to raise_error(SecurityError, /directory permissions/)
+      end
+
+      it 'prevents symlink attacks' do
+        malicious_link = File.join(ssl_dir, "#{site}.key")
+        FileUtils.ln_s('/etc/passwd', malicious_link)
+
+        expect { cert_manager.generate_certificates }
+          .to raise_error(SecurityError, /symlink/)
+      end
+
+      it 'validates file content integrity' do
+        allow(cert_manager).to receive(:generate_private_key).and_return(true)
+        key_path = File.join(ssl_dir, "#{site}.key")
+        File.write(key_path, "compromised content")
+
+        expect { cert_manager.verify_key_security(key_path) }
+          .to raise_error(SecurityError, /validation failed/)
+      end
+    end
+
+    context 'with system errors' do
+      it 'handles OpenSSL failures' do
+        allow(SecureCommand).to receive(:execute_command)
+          .and_raise(SecureCommand::CommandError)
+
+        expect { cert_manager.generate_certificates }
+          .to raise_error(CertManager::GenerationError)
+      end
+
+      it 'implements exponential backoff for retries' do
+        attempts = 0
+        allow(SecureCommand).to receive(:execute_command) do
+          attempts += 1
+          raise SecureCommand::CommandError if attempts < 3
+          true
+        end
+
+        expect { cert_manager.generate_certificates }.not_to raise_error
+        expect(attempts).to eq(3)
       end
     end
   end
 
-  describe "#generate_private_key" do
-    it "generates a private key" do
-      expect(SecureCommand).to receive(:openssl).with(
-        "genrsa",
-        "-out", "#{site}.key",
-        "2048",
-        working_dir: ssl_dir
-      )
-      cert_manager.send(:generate_private_key)
-    end
-  end
-
-  describe "#generate_csr" do
-    it "generates a CSR" do
-      expect(SecureCommand).to receive(:openssl).with(
-        "req",
-        "-new",
-        "-key", "#{site}.key",
-        "-out", "#{site}.csr",
-        "-subj", "/CN=#{site}/emailAddress=example@example.com",
-        working_dir: ssl_dir
-      )
-      cert_manager.send(:generate_csr)
-    end
-  end
-
-  describe "#create_ext_file" do
-    it "creates an ext file with the correct content" do
-      allow(SecureCommand).to receive(:openssl).and_return(true)
-      cert_manager.send(:create_ext_file)
-      ext_file = File.join(ssl_dir, "#{site}.ext")
-      expect(File.exist?(ext_file)).to be true
-
-      expected_content = <<~EXT
-        authorityKeyIdentifier=keyid,issuer
-        basicConstraints=CA:FALSE
-        keyUsage = digitalSignature, nonRepudiation, keyEncipherment, dataEncipherment
-        subjectAltName = @alt_names
-
-        [alt_names]
-        DNS.1 = #{site}
-      EXT
-
-      expect(File.read(ext_file)).to eq(expected_content)
-    end
-  end
-
-  describe "#generate_certificate" do
-    it "generates a certificate" do
-      expect(SecureCommand).to receive(:openssl).with(
-        "x509",
-        "-req",
-        "-in", "#{site}.csr",
-        "-CA", ca_file,
-        "-CAkey", ca_key,
-        "-CAcreateserial",
-        "-out", "#{site}.crt",
-        "-days", "825",
-        "-sha256",
-        "-extfile", "#{site}.ext",
-        working_dir: ssl_dir
-      )
-      cert_manager.send(:generate_certificate)
-    end
-  end
-
-  describe "validation" do
-    context "with invalid domain" do
-      let(:domain) { "invalid..domain" }
-
-      it "raises an error" do
-        expect {
-          described_class.new(site, ca_file, ca_key, ssl_dir)
-        }.to raise_error(CertManager::Error, /Invalid domain name/)
+  describe 'Input Validation' do
+    it 'rejects invalid domain names' do
+      ['invalid..domain', 'domain with spaces', 'domain/with/slashes'].each do |invalid_domain|
+        expect { described_class.new(invalid_domain, ssl_dir: ssl_dir) }
+          .to raise_error(CertManager::Error, /Invalid domain/)
       end
     end
 
-    context "with missing CA file" do
-      before { File.unlink(ca_file) }
-
-      it "raises an error" do
-        expect {
-          described_class.new(site, ca_file, ca_key, ssl_dir)
-        }.to raise_error(CertManager::Error, /CA file is not accessible/)
-      end
+    it 'enforces domain length limits' do
+      long_domain = 'a' * 255 + '.com'
+      expect { described_class.new(long_domain, ssl_dir: ssl_dir) }
+        .to raise_error(CertManager::Error, /exceeds maximum length/)
     end
 
-    context "with missing CA key" do
-      before { File.unlink(ca_key) }
+    it 'validates SSL directory path' do
+      expect { described_class.new(site, ssl_dir: '/nonexistent/path') }
+        .to raise_error(CertManager::Error, /SSL directory/)
+    end
+  end
 
-      it "raises an error" do
-        expect {
-          described_class.new(site, ca_file, ca_key, ssl_dir)
-        }.to raise_error(CertManager::Error, /CA key is not accessible/)
-      end
+  describe 'Resource Management' do
+    it 'enforces disk space requirements' do
+      allow(SafetyChecks).to receive(:validate_available_space!)
+        .and_raise(SafetyChecks::ResourceError)
+
+      expect { cert_manager.generate_certificates }
+        .to raise_error(CertManager::GenerationError, /disk space/)
+    end
+
+    it 'cleans up on failure' do
+      allow(cert_manager).to receive(:generate_private_key)
+        .and_raise(StandardError, "Simulated failure")
+
+      expect { cert_manager.generate_certificates rescue nil }
+        .not_to change { Dir.glob(File.join(ssl_dir, '*')).count }
     end
   end
 end

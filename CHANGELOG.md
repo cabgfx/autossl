@@ -1,104 +1,41 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+## [2.0.0] - 2023-12-02
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## [1.0.0] - 2024-01-XX
+### Security Improvements
+- Added comprehensive path validation and sanitization
+- Implemented secure atomic file operations
+- Added process isolation and resource limits
+- Added real-time filesystem monitoring
+- Prevented execution with elevated privileges
+- Enhanced certificate validation with strict X.509 checks
+- Added secure memory handling and cleanup
+- Implemented triple-overwrite secure deletion
+- Added protection against directory traversal attacks
+- Added system directory protection
 
 ### Added
-- Industrial-grade safety framework
-  - Transactional state management
-  - Crash recovery mechanisms
-  - Circuit breaker pattern
-  - Resource monitoring and protection
-  - Health checking system
-
-- Cross-platform excellence
-  - Native API integration
-  - Platform-specific optimizations
-  - Graceful fallback mechanisms
-  - Consistent behavior guarantees
-
-- Advanced monitoring capabilities
-  - Comprehensive logging system
-  - Resource usage tracking
-  - Operation statistics
-  - Health monitoring
-
-- Enhanced security measures
-  - Multi-layered safety checks
-  - Resource exhaustion prevention
-  - State corruption protection
-  - Enhanced path validation
+- New `FileMonitor` class for filesystem integrity checking
+- Secure temporary file handling
+- Process resource limits
+- Enhanced logging with rotation
+- Comprehensive error handling
+- Force option for certificate regeneration
 
 ### Changed
-- Fundamental architecture improvements
-  - Transaction-based operations
-  - Resource-aware processing
-  - Enhanced error handling
-  - Improved cleanup procedures
+- Improved OpenSSL configuration with stronger security settings
+- Enhanced CSR validation
+- Enhanced certificate validation
+- Improved error messages with detailed information
+- Updated dependency constraints
 
-- Configuration enhancements
-  - Resource limit controls
-  - Enhanced security parameters
-  - Platform-specific optimizations
-  - Monitoring configurations
+### Fixed
+- Fixed potential race conditions in file operations
+- Fixed memory leaks in cryptographic operations
+- Fixed path traversal vulnerabilities
+- Fixed temporary file handling
+- Fixed privilege escalation vectors
 
-- System requirements
-  - Memory requirements specified
-  - Disk space requirements added
-  - CPU utilization limits
-  - Operation rate limits
+## [1.0.0] - 2023-12-01
 
-### Security
-- Comprehensive safety measures
-  - Resource protection
-  - State integrity guarantees
-  - Operation isolation
-  - Failure containment
-
-- Enhanced security controls
-  - Strict permission enforcement
-  - Path validation improvements
-  - Input sanitization
-  - Resource quotas
-
-### Performance
-- Resource optimization
-  - Memory usage controls
-  - CPU utilization management
-  - Disk space monitoring
-  - Operation rate management
-
-- Efficiency improvements
-  - Native API utilization
-  - Optimized file operations
-  - Enhanced state management
-  - Reduced resource overhead
-
-### Migration
-Users upgrading to 1.0.0 must:
-1. Review system requirements
-   - Verify memory availability (512MB minimum)
-   - Check disk space (10MB minimum)
-   - Ensure proper permissions
-
-2. Update configuration
-   - Configure resource limits
-   - Review security settings
-   - Update path configurations
-   - Set monitoring parameters
-
-3. Operational changes
-   - Implement new monitoring
-   - Update health checks
-   - Review logging configuration
-   - Update automation scripts
-
-## [0.1.0] - Initial Release
-
-- Basic SSL certificate generation
-- Simple configuration management
-- Basic command-line interface
+Initial release

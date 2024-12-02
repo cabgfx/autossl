@@ -1,260 +1,153 @@
 # AutoSSL
 
-A mission-critical, industrial-grade tool for managing self-signed SSL certificates with comprehensive safety guarantees.
+A secure, industrial-grade SSL certificate management tool with comprehensive safety measures and filesystem protection.
 
-## Core Features
+## Security Features
 
-- 🔒 **Industrial-Grade Security**
-  - Comprehensive path validation
-  - Strict permission enforcement
-  - Resource exhaustion prevention
-  - Symlink attack protection
+- Comprehensive path validation and sanitization
+- Secure atomic file operations
+- Process isolation and resource limits
+- Real-time filesystem monitoring
+- Prevention of privileged execution
+- Enhanced certificate validation
+- Secure memory handling
+- Triple-overwrite secure deletion
+- Protection against directory traversal
+- System directory protection
 
-- 🛡️ **Mission-Critical Reliability**
-  - Transactional state management
-  - Crash recovery mechanisms
-  - Circuit breaker pattern
-  - Resource monitoring
+## Requirements
 
-- 🌍 **Cross-Platform Excellence**
-  - Native API integration
-  - Platform-specific optimizations
-  - Graceful fallbacks
-  - Consistent behavior
-
-- 📊 **Advanced Monitoring**
-  - Detailed logging
-  - Resource usage tracking
-  - Operation statistics
-  - Health monitoring
-
-## System Requirements
-
-- Ruby 2.6 or higher
-- OpenSSL (system installation)
-- Write permissions for config directory
+- Ruby >= 3.2.0
+- OpenSSL >= 3.1.0
+- Non-root user account
+- Dedicated certificate directory
 - Minimum 512MB available memory
-- Sufficient disk space (10MB minimum)
+- Minimum 10MB free disk space
 
 ## Installation
 
 ```bash
-gem install auto_ssl
+gem install autossl
 ```
 
-## Quick Start
+## Usage
 
-1. Initialize configuration:
+### Basic Certificate Generation
 
-```bash
-autossl init
+```ruby
+autossl generate example.com com
 ```
 
-2. Generate a certificate:
+### Options
 
-```bash
-autossl generate example com
-```
+- `--force, -f`: Force overwrite existing certificates
+- `--ca-file PATH`: Path to CA certificate
+- `--ca-key PATH`: Path to CA private key
+- `--ssl-dir PATH`: Custom SSL certificate output directory
 
-## Safety Guarantees
+## Security Considerations
 
-AutoSSL implements multiple layers of safety measures:
+### Directory Safety
 
-### Resource Protection
-- Memory usage monitoring
-- CPU utilization tracking
-- Disk space verification
-- Resource limit enforcement
+The tool implements strict safeguards:
+- Prevents operations in system directories
+- Validates all paths against directory traversal
+- Monitors for unauthorized file changes
+- Ensures atomic operations
 
-### State Management
-- Transactional operations
-- Automatic crash recovery
-- State corruption prevention
-- Atomic file operations
+### Process Security
 
-### Security Measures
-- Path traversal prevention
-- Symlink attack protection
-- Strict permission enforcement
-- Resource exhaustion prevention
+- Prevents execution as root
+- Sets strict resource limits
+- Prevents process forking
+- Monitors system resource usage
 
-### Reliability Features
-- Circuit breaker pattern
-- Rate limiting
-- Operation timeouts
-- Automatic cleanup
+### File Operations
+
+- Atomic write operations
+- Secure temporary file handling
+- Triple-overwrite secure deletion
+- File locking for concurrent access
+
+### Certificate Security
+
+- Strict X.509 validation
+- Enhanced CSR validation
+- Strong key usage enforcement
+- Comprehensive extension validation
 
 ## Configuration
 
-### Locations
-AutoSSL follows XDG Base Directory Specification:
-
-```
-Config: $XDG_CONFIG_HOME/autossl/config.yml
-Data:   $XDG_DATA_HOME/autossl/
-Logs:   $XDG_DATA_HOME/autossl/autossl.log
-State:  $XDG_DATA_HOME/autossl/safety_checks_state.yml
-```
-
-### Settings
+Default configuration is created at `~/.config/autossl/config.yml`:
 
 ```yaml
-# config.yml
 ssl_dir: ~/.local/share/autossl/certificates
-ca_file: /path/to/ca.crt
-ca_key: /path/to/ca.key
+ca_file: null
+ca_key: null
+memory_limit: 512
+cpu_limit: 80
+operation_rate: 100
+timeout: 30
+log_level: info
+security:
+  min_key_size: 4096
+  cert_validity_days: 365
+  require_strong_entropy: true
+  openssl_security_level: 2
 ```
 
-### Resource Limits
+## Best Practices
 
-```yaml
-# Resource limits (adjustable in config)
-memory_limit: 512MB
-cpu_limit: 80%
-operation_rate: 100/second
-timeout: 30 seconds
-```
+1. **Directory Setup**:
+   - Use a dedicated directory for certificates
+   - Ensure proper directory permissions (0700)
+   - Keep backups of important certificates
 
-## Security Model
+2. **Security**:
+   - Never run as root
+   - Use strong passwords for private keys
+   - Regularly rotate certificates
+   - Monitor log files for unauthorized access
 
-### File Operations
-- All file operations are atomic
-- Strict permission checking (600 for files, 700 for directories)
-- Path validation and sanitization
-- Symlink protection
-
-### State Management
-- Transactional state changes
-- Crash recovery mechanisms
-- Corruption prevention
-- Automatic rollback
-
-### Resource Management
-- Memory usage monitoring
-- CPU utilization tracking
-- Disk space verification
-- Operation rate limiting
+3. **Resource Management**:
+   - Monitor available disk space
+   - Check system memory usage
+   - Review process limits
+   - Monitor CPU usage
 
 ## Error Handling
 
-### Circuit Breaker
-Automatically prevents cascading failures:
-- Trips after 5 consecutive failures
-- 60-second cooling period
-- Automatic state recovery
-- Operation isolation
+The tool provides detailed error messages and logging:
 
-### Resource Exhaustion
-Prevents system overload:
-- Memory usage limits
-- CPU utilization caps
-- Disk space requirements
-- Operation rate limits
-
-### Recovery Mechanisms
-- Automatic crash recovery
-- State rollback capabilities
-- Resource cleanup
-- Logging and monitoring
-
-## Monitoring
-
-### Logging
-Comprehensive logging at `$XDG_DATA_HOME/autossl/autossl.log`:
-- Operation tracking
-- Error reporting
-- Resource usage
-- State changes
-
-### Health Checks
-- Memory usage monitoring
-- CPU utilization tracking
-- Disk space verification
-- Operation success rates
-
-## Command Reference
-
-### Initialize
-
-```bash
-autossl init [--force]
 ```
-Creates necessary directories and configuration with proper permissions.
-
-### Generate Certificate
-
-```bash
-autossl generate DOMAIN TLD [options]
+~/.local/share/autossl/autossl.log
 ```
 
-Options:
-- `--ca-file PATH`: CA certificate location
-- `--ca-key PATH`: CA private key location
-- `--ssl-dir PATH`: Certificate output directory
-
-### Verify Configuration
-
-```bash
-autossl verify
-```
-Checks configuration and system requirements.
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Resource Limits**
-   - Increase available memory
-   - Reduce CPU load
-   - Free disk space
-   - Adjust rate limits
-
-2. **Permission Errors**
-   - Check file ownership
-   - Verify directory permissions
-   - Ensure proper umask
-   - Check parent directory permissions
-
-3. **State Recovery**
-   - Check transaction logs
-   - Verify state file integrity
-   - Review operation logs
-   - Clear stale locks
-
-### Error Messages
-
-Detailed error messages with solutions:
-
-- "Circuit breaker open": Wait for cooling period or check logs
-- "Resource limit exceeded": Free resources or adjust limits
-- "Permission denied": Check file/directory permissions
-- "State corruption detected": Review transaction logs
-
-## Migration Guide
-
-### From Previous Versions
-
-1. Backup existing certificates and configuration
-2. Update to latest version
-3. Run `autossl init --force`
-4. Verify configuration
-5. Test certificate generation
-
-### Configuration Changes
-
-1. New resource limits
-2. Enhanced security settings
-3. Updated file locations
-4. Additional monitoring options
+Common error categories:
+- SecurityError: Security violations
+- ValidationError: Input/parameter validation failures
+- ResourceError: System resource issues
+- GenerationError: Certificate generation failures
 
 ## Contributing
 
-Contributions welcome! Please read our contributing guidelines and submit pull requests.
+1. Fork the repository
+2. Create your feature branch
+3. Add tests for new features
+4. Ensure all tests pass
+5. Submit a pull request
 
 ## License
 
 MIT License - see LICENSE file for details.
 
+## Support
+
+- Issue Tracker: [GitHub Issues](https://github.com/username/autossl/issues)
+- Documentation: [Wiki](https://github.com/username/autossl/wiki)
+
 ## Acknowledgments
 
-This project implements industrial-grade safety measures through the use of Cursor's AI pair programming system.
+- OpenSSL team for cryptographic foundations
+- Ruby community for excellent tools and libraries
+- Security researchers for valuable feedback

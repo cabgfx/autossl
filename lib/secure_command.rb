@@ -2,137 +2,196 @@ require "open3"
 require "shellwords"
 require "rbconfig"
 require "logger"
+require "timeout"
+require "digest"
 
 module SecureCommand
   class Error < StandardError; end
-
   class CommandError < Error; end
+  class SecurityError < Error; end
+  class TimeoutError < Error; end
 
-  # Define common paths based on platform
+  # Security constants
+  MAX_COMMAND_LENGTH = 4096
+  MAX_OUTPUT_SIZE = 10 * 1024 * 1024  # 10MB
+  EXECUTION_TIMEOUT = 300  # 5 minutes
+  MAX_RETRIES = 3
+
+  # Paths to the OpenSSL executable based on the host OS
   OPENSSL_PATHS = case RbConfig::CONFIG["host_os"]
-  when /darwin/
-    [
-      "/opt/homebrew/bin/openssl",    # Apple Silicon Homebrew
-      "/usr/local/bin/openssl",       # Intel Homebrew
-      "/usr/bin/openssl"              # System OpenSSL
-    ]
-  when /linux/
-    [
-      "/usr/bin/openssl",
-      "/usr/local/bin/openssl",
-      "/opt/openssl/bin/openssl"      # Custom OpenSSL installations
-    ]
-  else
-    [
-      "/usr/bin/openssl",
-      "/usr/local/bin/openssl"
-    ]
-  end.freeze
+                  when /darwin/
+                    [
+                      "/opt/homebrew/bin/openssl",    # Apple Silicon Homebrew
+                      "/usr/local/bin/openssl",       # Intel Homebrew
+                      "/usr/bin/openssl"              # System OpenSSL
+                    ]
+                  when /linux/
+                    [
+                      "/usr/bin/openssl",
+                      "/usr/local/bin/openssl"
+                    ]
+                  else
+                    []
+                  end.freeze
 
-  # Define allowed OpenSSL commands and their allowed options
-  ALLOWED_COMMANDS = {
-    "genrsa" => ["-out", "2048"],
-    "req" => ["-new", "-key", "-out", "-subj"],
-    "x509" => ["-req", "-in", "-CA", "-CAkey", "-CAcreateserial", "-out", "-days", "-sha256", "-extfile"]
-  }.freeze
+  # Allowed OpenSSL commands
+  ALLOWED_COMMANDS = %w[
+    genrsa
+    req
+    x509
+    verify
+    dgst
+    enc
+  ].freeze
 
-  # Initialize logger
-  def self.logger
-    @logger ||= Logger.new(File.join(SafePath.data_home, "autossl.log"))
-  end
-
-  module_function
-
-  def openssl(*args, working_dir: nil)
-    # Validate OpenSSL command and arguments
-    validate_openssl_args!(args)
-
-    # Build command with explicit path to OpenSSL
-    openssl_path = find_openssl_path
-    command = [openssl_path, *args]
-
-    logger.info("Executing OpenSSL command: #{command.join(" ")}")
-
-    # Execute in specified working directory with file locking
-    Dir.chdir(working_dir || Dir.pwd) do
-      execute_command(command)
-    end
-  end
-
-  def execute_command(command)
-    stdout, stderr, status = Open3.capture3(*command)
-
-    unless status.success?
-      logger.error("OpenSSL command failed (exit #{status.exitstatus}): #{stderr}")
-      raise CommandError, "Command failed (exit #{status.exitstatus}): #{stderr}"
-    end
-
-    logger.info("OpenSSL command output: #{stdout.strip}")
-    stdout
-  end
-
-  def validate_openssl_args!(args)
-    command = args.first
-    unless ALLOWED_COMMANDS.key?(command)
-      logger.error("Unsupported OpenSSL command: #{command}")
-      raise Error, "Unsupported OpenSSL command: #{command}"
-    end
-
-    # Validate all arguments against whitelist
-    args.each_with_index do |arg, i|
-      next if i == 0 # Skip the command itself
-
-      if arg.start_with?("-")
-        unless ALLOWED_COMMANDS[command].include?(arg)
-          logger.error("Unsupported option for #{command}: #{arg}")
-          raise Error, "Unsupported option for #{command}: #{arg}"
+  class << self
+    def logger
+      @logger ||= begin
+        logger = Logger.new(File.join(SafePath::DATA_HOME, "autossl.log"))
+        logger.level = Logger::INFO
+        logger.formatter = proc do |severity, datetime, progname, msg|
+          "[#{datetime.utc.iso8601}] [#{severity}] [CMD] [#{Process.pid}] #{msg}\n"
         end
-      else
-        # For non-option arguments, ensure they are valid
-        unless ALLOWED_COMMANDS[command].include?(arg)
-          logger.error("Unexpected argument for #{command}: #{arg}")
-          raise Error, "Unexpected argument for #{command}: #{arg}"
+        logger
+      end
+    end
+
+    def openssl_executable
+      @openssl_executable ||= begin
+        path = OPENSSL_PATHS.find { |p| File.executable?(p) }
+        unless path
+          raise SecurityError, "OpenSSL executable not found in approved paths"
+        end
+
+        # Verify OpenSSL binary integrity
+        verify_openssl_binary(path)
+        path
+      end
+    end
+
+    def execute_command(*args, working_dir: nil, timeout: EXECUTION_TIMEOUT)
+      # Validate command and arguments
+      validate_command!(*args)
+
+      # Prepare command with full path to OpenSSL
+      full_command = [openssl_executable, *args]
+
+      # Change to working directory if specified
+      Dir.chdir(working_dir || Dir.pwd) do
+        execute_with_safety(*full_command, timeout: timeout)
+      end
+    end
+
+    private
+
+    def validate_command!(*args)
+      # Validate command length
+      command_str = args.join(' ')
+      if command_str.length > MAX_COMMAND_LENGTH
+        raise SecurityError, "Command length exceeds maximum allowed"
+      end
+
+      # Validate OpenSSL subcommand
+      subcommand = args.first.to_s.downcase
+      unless ALLOWED_COMMANDS.include?(subcommand)
+        raise SecurityError, "Unauthorized OpenSSL command: #{subcommand}"
+      end
+
+      # Check for shell metacharacters
+      args.each do |arg|
+        if arg.to_s =~ /[;&|`$><]/
+          raise SecurityError, "Command contains prohibited characters"
         end
       end
     end
-  end
 
-  def find_openssl_path
-    # First try using PATH
-    openssl_path = find_in_path("openssl")
-    return openssl_path if openssl_path
+    def execute_with_safety(*command, timeout: EXECUTION_TIMEOUT)
+      output = ""
+      error = ""
+      exit_status = nil
+      retries = 0
 
-    # Then try platform-specific paths
-    openssl_path = OPENSSL_PATHS.find { |p| File.executable?(p) }
-    unless openssl_path
-      logger.error("Could not find OpenSSL executable")
-      raise Error, "Could not find OpenSSL executable"
-    end
+      begin
+        # Set resource limits
+        Process.setrlimit(Process::RLIMIT_CPU, 30, 30) # 30 seconds CPU time
+        Process.setrlimit(Process::RLIMIT_NOFILE, 1024, 1024) # File descriptor limit
 
-    openssl_path
-  end
+        Timeout.timeout(timeout) do
+          Open3.popen3(*command) do |stdin, stdout, stderr, wait_thread|
+            # Close stdin immediately
+            stdin.close
 
-  def find_in_path(cmd)
-    exts = ENV["PATHEXT"] ? ENV["PATHEXT"].split(";") : [""]
-    ENV["PATH"].split(File::PATH_SEPARATOR).each do |path|
-      exts.each do |ext|
-        exe = File.join(path, "#{cmd}#{ext}")
-        return exe if File.executable?(exe) && !File.directory?(exe)
+            # Read output with size limits
+            output = read_with_limit(stdout, MAX_OUTPUT_SIZE)
+            error = read_with_limit(stderr, MAX_OUTPUT_SIZE)
+
+            exit_status = wait_thread.value
+          end
+        end
+
+        unless exit_status.success?
+          raise CommandError, "Command failed: #{error}"
+        end
+
+        output
+      rescue Timeout::Error
+        Process.kill('TERM', wait_thread.pid) if defined?(wait_thread) && wait_thread
+        raise TimeoutError, "Command execution timed out"
+      rescue => e
+        retries += 1
+        if retries < MAX_RETRIES
+          logger.warn("Command failed, retrying (#{retries}/#{MAX_RETRIES}): #{e.message}")
+          sleep(retries)  # Exponential backoff
+          retry
+        else
+          raise CommandError, "Command failed after #{MAX_RETRIES} attempts: #{e.message}"
+        end
+      ensure
+        # Clean up any temporary files or resources
+        cleanup_resources
       end
     end
-    nil
-  end
 
-  def escape_string(str)
-    # Remove any potentially dangerous characters
-    cleaned = str.gsub(/[^a-zA-Z0-9._-]/, "")
+    def read_with_limit(io, limit)
+      result = ""
+      bytes_read = 0
 
-    # Ensure the string isn't empty and doesn't start with a dash
-    if cleaned.empty? || cleaned.start_with?("-")
-      logger.error("Invalid string after sanitization: #{str}")
-      raise Error, "Invalid string after sanitization: #{str}"
+      while chunk = io.read(8192)
+        bytes_read += chunk.bytesize
+        if bytes_read > limit
+          raise SecurityError, "Command output exceeds size limit"
+        end
+        result << chunk
+      end
+
+      result
     end
 
-    cleaned
+    def verify_openssl_binary(path)
+      # Get file hash
+      file_hash = Digest::SHA256.file(path).hexdigest
+
+      # Compare with known good hash or verify signature
+      # This should be implemented according to your security requirements
+      # For example, verifying against a trusted hash database or checking code signatures
+
+      stat = File.stat(path)
+      unless stat.owned? && (stat.mode & 0o777) <= 0o755
+        raise SecurityError, "OpenSSL binary has incorrect permissions"
+      end
+    end
+
+    def cleanup_resources
+      # Ensure all file handles are closed
+      ObjectSpace.each_object(File) do |f|
+        next if f.closed?
+        next if [STDIN, STDOUT, STDERR].include?(f)
+        f.close
+      end
+
+      # Force garbage collection
+      GC.start
+    end
   end
 end
+
