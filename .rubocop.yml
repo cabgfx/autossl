@@ -1,0 +1,83 @@
+require:
+  - rubocop-rspec
+
+AllCops:
+  TargetRubyVersion: 2.7
+  Exclude:
+    - 'db/**/*'
+    - 'bin/*'
+    - 'node_modules/**/*'
+    - 'vendor/**/*'
+    - 'spec/spec_helper.rb'
+    - 'spec/support/**/*.rb'
+  NewCops: enable
+  DisplayCopNames: true
+  EnabledByDefault: true
+  SafeAutoCorrect: true
+  LineLength:
+    Max: 120
+
+# Layout
+Layout/LineLength:
+  Max: 120
+Layout/IndentationWidth:
+  Width: 2
+Layout/TrailingWhitespace:
+    Enabled: true
+Layout/EmptyLineBetweenDefs:
+  Enabled: true
+
+# Style
+Style/FrozenStringLiteralComment:
+  Enabled: true
+Style/StringLiterals:
+  EnforcedStyle: double_quotes
+Style/Documentation:
+  Enabled: true
+Style/MethodName:
+  EnforcedStyle: snake_case
+Style/ClassAndModuleCamelCase:
+  EnforcedStyle: CamelCase
+Style/SingleLineClass:
+  Enabled: true
+Style/PredicateName:
+  Enabled: true
+
+# Lint
+Lint/UselessAssignment:
+  Enabled: true
+Lint/ShadowingOuterLocalVariable:
+  Enabled: true
+Lint/AmbiguousBlockAssociation:
+  Enabled: true
+Lint/UnusedMethodArgument:
+  Enabled: true
+Lint/RedundantCopDisableDirective:
+  Enabled: true
+
+# Security
+Security/YAMLLoad:
+  Enabled: true
+
+# Performance
+Performance/RedundantMerge:
+  Enabled: true
+Performance/MapCompact:
+  Enabled: true
+
+# RSpec
+RSpec/FilePath:
+  Enabled: true
+  Include:
+    - 'spec/**/*_spec.rb'
+  Exclude:
+    - 'spec/spec_helper.rb'
+    - 'spec/support/**/*.rb'
+RSpec/MultipleExpectations:
+  Enabled: false
+RSpec/InstanceVariable:
+  Enabled: true
+RSpec/DescribedClass:
+  Enabled: true
+RSpec/ExampleWording:
+  Enabled: true

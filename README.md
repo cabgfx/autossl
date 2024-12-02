@@ -1,121 +1,153 @@
 # AutoSSL
 
-## Overview
+A secure, industrial-grade SSL certificate management tool with comprehensive safety measures and filesystem protection.
 
-AutoSSL is a Ruby-based command-line tool designed to automate the creation of self-signed SSL certificates for local development environments. By leveraging OpenSSL and the Thor gem, this tool simplifies the process of generating private keys, Certificate Signing Requests (CSRs), and SSL certificates, adhering to a consistent format for subdomains.
+## Security Features
 
-## Features
+- Comprehensive path validation and sanitization
+- Secure atomic file operations
+- Process isolation and resource limits
+- Real-time filesystem monitoring
+- Prevention of privileged execution
+- Enhanced certificate validation
+- Secure memory handling
+- Triple-overwrite secure deletion
+- Protection against directory traversal
+- System directory protection
 
-- Automated generation of private keys, CSRs, and self-signed certificates
-- Customizable subdomain and top-level domain (TLD) configuration
-- Easy integration with local development environments
-- Utilizes the robust Thor gem for CLI functionality
+## Requirements
 
-## Prerequisites
-
-- Ruby 3.1 or higher
-- OpenSSL installed on your system
-- A pre-existing local CA (Certificate Authority) *— NOTE: This a temporary requirement, to allow v.0.1 to ship — soon, AutoSSL handles this step, too.*
+- Ruby >= 3.2.0
+- OpenSSL >= 3.1.0
+- Non-root user account
+- Dedicated certificate directory
+- Minimum 512MB available memory
+- Minimum 10MB free disk space
 
 ## Installation
 
-1. Install the Thor gem:
-    ```bash
-    gem install thor
-    ```
-
-2. Clone this repository:
-    ```bash
-    git clone https://github.com/yourusername/auto_ssl.git
-    cd auto_ssl
-    ```
+```bash
+gem install autossl
+```
 
 ## Usage
 
-Navigate to the directory where you have cloned the repository and run the script using the following syntax:
+### Basic Certificate Generation
 
-```bash
-ruby auto_ssl.rb generate DOMAIN TLD
+```ruby
+autossl generate example.com com
 ```
 
-For example, to generate a certificate for `dev.example.com`:
+### Options
 
-```bash
-ruby auto_ssl.rb generate example com
-```
+- `--force, -f`: Force overwrite existing certificates
+- `--ca-file PATH`: Path to CA certificate
+- `--ca-key PATH`: Path to CA private key
+- `--ssl-dir PATH`: Custom SSL certificate output directory
 
-## Directory Structure
+## Security Considerations
 
-```
-auto_ssl/
-│
-├── lib/
-│   └── cert_manager.rb
-├── spec/
-│   ├── spec_helper.rb
-│   ├── auto_ssl_spec.rb
-│   └── cert_manager_spec.rb
-├── auto_ssl.rb
-├── README.md
-└── LICENSE
-```
+### Directory Safety
 
-## How It Works
+The tool implements strict safeguards:
+- Prevents operations in system directories
+- Validates all paths against directory traversal
+- Monitors for unauthorized file changes
+- Ensures atomic operations
 
-1. **Generate Private Key:**
-    - Uses OpenSSL to create a 2048-bit RSA private key.
-    ```bash
-    openssl genrsa -out dev.example.com.key 2048
-    ```
+### Process Security
 
-2. **Generate CSR:**
-    - Generates a Certificate Signing Request (CSR) using the private key. It automatically fills in the necessary fields.
-    ```bash
-    openssl req -new -key dev.example.com.key -out dev.example.com.csr -subj '/CN=dev.example.com/emailAddress=example@example.com'
-    ```
+- Prevents execution as root
+- Sets strict resource limits
+- Prevents process forking
+- Monitors system resource usage
 
-3. **Create `.ext` File:**
-    - Generates an extension configuration file required for creating the certificate.
-    ```text
-    authorityKeyIdentifier=keyid,issuer
-    basicConstraints=CA:FALSE
-    keyUsage = digitalSignature, nonRepudiation, keyEncipherment, dataEncipherment
-    subjectAltName = @alt_names
+### File Operations
 
-    [alt_names]
-    DNS.1 = dev.example.com
-    ```
+- Atomic write operations
+- Secure temporary file handling
+- Triple-overwrite secure deletion
+- File locking for concurrent access
 
-4. **Generate Certificate:**
-    - Uses the local CA to create a self-signed certificate.
-    ```bash
-    openssl x509 -req -in dev.example.com.csr -CA <yourCA>.pem -CAkey <yourCA>.key -CAcreateserial -out dev.example.com.crt -days 825 -sha256 -extfile dev.example.com.ext
-    ```
+### Certificate Security
 
-
+- Strict X.509 validation
+- Enhanced CSR validation
+- Strong key usage enforcement
+- Comprehensive extension validation
 
 ## Configuration
 
-By default, the script operates within the `~/ssl` directory and expects a local CA named `<yourCA>.pem` and `<yourCA>.key`. You can adjust these settings by modifying the script as needed.
+Default configuration is created at `~/.config/autossl/config.yml`:
+
+```yaml
+ssl_dir: ~/.local/share/autossl/certificates
+ca_file: null
+ca_key: null
+memory_limit: 512
+cpu_limit: 80
+operation_rate: 100
+timeout: 30
+log_level: info
+security:
+  min_key_size: 4096
+  cert_validity_days: 365
+  require_strong_entropy: true
+  openssl_security_level: 2
+```
+
+## Best Practices
+
+1. **Directory Setup**:
+   - Use a dedicated directory for certificates
+   - Ensure proper directory permissions (0700)
+   - Keep backups of important certificates
+
+2. **Security**:
+   - Never run as root
+   - Use strong passwords for private keys
+   - Regularly rotate certificates
+   - Monitor log files for unauthorized access
+
+3. **Resource Management**:
+   - Monitor available disk space
+   - Check system memory usage
+   - Review process limits
+   - Monitor CPU usage
+
+## Error Handling
+
+The tool provides detailed error messages and logging:
+
+```
+~/.local/share/autossl/autossl.log
+```
+
+Common error categories:
+- SecurityError: Security violations
+- ValidationError: Input/parameter validation failures
+- ResourceError: System resource issues
+- GenerationError: Certificate generation failures
 
 ## Contributing
 
-We welcome contributions from the community! Please follow these steps:
-
-1. Fork the repository.
-2. Create a new feature branch (`git checkout -b feature-branch`).
-3. Commit your changes (`git commit -am 'Add new feature'`).
-4. Push to the branch (`git push origin feature-branch`).
-5. Create a new Pull Request.
+1. Fork the repository
+2. Create your feature branch
+3. Add tests for new features
+4. Ensure all tests pass
+5. Submit a pull request
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+MIT License - see LICENSE file for details.
+
+## Support
+
+- Issue Tracker: [GitHub Issues](https://github.com/username/autossl/issues)
+- Documentation: [Wiki](https://github.com/username/autossl/wiki)
 
 ## Acknowledgments
 
-Special thanks to all the contributors and the Ruby community for their support and inspiration.
-
-## Contact
-
-For any inquiries or support, please open an issue on GitHub or contact the project maintainers.
+- OpenSSL team for cryptographic foundations
+- Ruby community for excellent tools and libraries
+- Security researchers for valuable feedback

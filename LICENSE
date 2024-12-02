@@ -1,4 +1,6 @@
-Copyright (c) Casper Klenz-Kitenge
+MIT License
+
+Copyright (c) 2024 Casper Klenz-Kitenge
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -17,3 +19,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+Note: This software includes significant enhancements developed through the use
+of Cursor's AI pair programming system. These enhancements focus on industrial-grade safety measures and
+mission-critical reliability features.
