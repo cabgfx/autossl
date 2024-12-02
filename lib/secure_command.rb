@@ -1,31 +1,39 @@
-require 'open3'
-require 'shellwords'
-require 'rbconfig'
+require "open3"
+require "shellwords"
+require "rbconfig"
 
 module SecureCommand
   class Error < StandardError; end
+
   class CommandError < Error; end
 
   # Define common paths based on platform
-  OPENSSL_PATHS = case RbConfig::CONFIG['host_os']
+  OPENSSL_PATHS = case RbConfig::CONFIG["host_os"]
   when /darwin/
     [
-      '/opt/homebrew/bin/openssl',    # Apple Silicon Homebrew
-      '/usr/local/bin/openssl',       # Intel Homebrew
-      '/usr/bin/openssl'              # System OpenSSL
+      "/opt/homebrew/bin/openssl",    # Apple Silicon Homebrew
+      "/usr/local/bin/openssl",       # Intel Homebrew
+      "/usr/bin/openssl"              # System OpenSSL
     ]
   when /linux/
     [
-      '/usr/bin/openssl',
-      '/usr/local/bin/openssl',
-      '/opt/openssl/bin/openssl'      # Custom OpenSSL installations
+      "/usr/bin/openssl",
+      "/usr/local/bin/openssl",
+      "/opt/openssl/bin/openssl"      # Custom OpenSSL installations
     ]
   else
     [
-      '/usr/bin/openssl',
-      '/usr/local/bin/openssl'
+      "/usr/bin/openssl",
+      "/usr/local/bin/openssl"
     ]
   end.freeze
+
+  # Define allowed OpenSSL commands and their allowed options
+  ALLOWED_COMMANDS = {
+    "genrsa" => ["-out"],
+    "req" => ["-new", "-key", "-out", "-subj"],
+    "x509" => ["-req", "-in", "-CA", "-CAkey", "-CAcreateserial", "-out", "-days", "-sha256", "-extfile"]
+  }.freeze
 
   module_function
 
@@ -54,13 +62,6 @@ module SecureCommand
   end
 
   def validate_openssl_args!(args)
-    # Whitelist of allowed OpenSSL commands and their allowed options
-    ALLOWED_COMMANDS = {
-      'genrsa' => ['-out'],
-      'req' => ['-new', '-key', '-out', '-subj'],
-      'x509' => ['-req', '-in', '-CA', '-CAkey', '-CAcreateserial', '-out', '-days', '-sha256', '-extfile']
-    }.freeze
-
     command = args.first
     unless ALLOWED_COMMANDS.key?(command)
       raise Error, "Unsupported OpenSSL command: #{command}"
@@ -70,7 +71,7 @@ module SecureCommand
     args.each_with_index do |arg, i|
       next if i == 0 # Skip the command itself
 
-      if arg.start_with?('-')
+      if arg.start_with?("-")
         unless ALLOWED_COMMANDS[command].include?(arg)
           raise Error, "Unsupported option for #{command}: #{arg}"
         end
@@ -80,7 +81,7 @@ module SecureCommand
 
   def find_openssl_path
     # First try using PATH
-    openssl_path = find_in_path('openssl')
+    openssl_path = find_in_path("openssl")
     return openssl_path if openssl_path
 
     # Then try platform-specific paths
@@ -91,8 +92,8 @@ module SecureCommand
   end
 
   def find_in_path(cmd)
-    exts = ENV['PATHEXT'] ? ENV['PATHEXT'].split(';') : ['']
-    ENV['PATH'].split(File::PATH_SEPARATOR).each do |path|
+    exts = ENV["PATHEXT"] ? ENV["PATHEXT"].split(";") : [""]
+    ENV["PATH"].split(File::PATH_SEPARATOR).each do |path|
       exts.each do |ext|
         exe = File.join(path, "#{cmd}#{ext}")
         return exe if File.executable?(exe) && !File.directory?(exe)
@@ -103,10 +104,10 @@ module SecureCommand
 
   def escape_string(str)
     # Remove any potentially dangerous characters
-    cleaned = str.gsub(/[^a-zA-Z0-9._-]/, '')
+    cleaned = str.gsub(/[^a-zA-Z0-9._-]/, "")
 
     # Ensure the string isn't empty and doesn't start with a dash
-    if cleaned.empty? || cleaned.start_with?('-')
+    if cleaned.empty? || cleaned.start_with?("-")
       raise Error, "Invalid string after sanitization: #{str}"
     end
 
