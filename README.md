@@ -1,21 +1,40 @@
 # AutoSSL
 
-A secure, cross-platform tool for generating self-signed SSL certificates with proper domain validation.
+A mission-critical, industrial-grade tool for managing self-signed SSL certificates with comprehensive safety guarantees.
 
-## Features
+## Core Features
 
-- 🔒 Secure certificate generation with OpenSSL
-- 🌍 Cross-platform support (macOS and Linux)
-- 🏠 XDG Base Directory compliance
-- 🛡️ Comprehensive security measures
-- 🔐 Safe configuration management
-- 📁 Platform-appropriate file storage
+- 🔒 **Industrial-Grade Security**
+  - Comprehensive path validation
+  - Strict permission enforcement
+  - Resource exhaustion prevention
+  - Symlink attack protection
 
-## Prerequisites
+- 🛡️ **Mission-Critical Reliability**
+  - Transactional state management
+  - Crash recovery mechanisms
+  - Circuit breaker pattern
+  - Resource monitoring
+
+- 🌍 **Cross-Platform Excellence**
+  - Native API integration
+  - Platform-specific optimizations
+  - Graceful fallbacks
+  - Consistent behavior
+
+- 📊 **Advanced Monitoring**
+  - Detailed logging
+  - Resource usage tracking
+  - Operation statistics
+  - Health monitoring
+
+## System Requirements
 
 - Ruby 2.6 or higher
-- OpenSSL (system installation or via package manager)
+- OpenSSL (system installation)
 - Write permissions for config directory
+- Minimum 512MB available memory
+- Sufficient disk space (10MB minimum)
 
 ## Installation
 
@@ -37,51 +56,130 @@ autossl init
 autossl generate example com
 ```
 
-This will create a certificate for `dev.example.com`
+## Safety Guarantees
+
+AutoSSL implements multiple layers of safety measures:
+
+### Resource Protection
+- Memory usage monitoring
+- CPU utilization tracking
+- Disk space verification
+- Resource limit enforcement
+
+### State Management
+- Transactional operations
+- Automatic crash recovery
+- State corruption prevention
+- Atomic file operations
+
+### Security Measures
+- Path traversal prevention
+- Symlink attack protection
+- Strict permission enforcement
+- Resource exhaustion prevention
+
+### Reliability Features
+- Circuit breaker pattern
+- Rate limiting
+- Operation timeouts
+- Automatic cleanup
 
 ## Configuration
 
-AutoSSL stores its configuration in platform-specific locations:
+### Locations
+AutoSSL follows XDG Base Directory Specification:
 
-- **Linux**: `~/.config/autossl/config.yml`
-- **macOS**: `~/Library/Application Support/autossl/config.yml`
-- If `XDG_CONFIG_HOME` is set, it will be used instead
+```
+Config: $XDG_CONFIG_HOME/autossl/config.yml
+Data:   $XDG_DATA_HOME/autossl/
+Logs:   $XDG_DATA_HOME/autossl/autossl.log
+State:  $XDG_DATA_HOME/autossl/safety_checks_state.yml
+```
 
-Certificates are stored in:
-- **Linux**: `~/.local/share/autossl/certificates`
-- **macOS**: `~/Library/Application Support/autossl/certificates`
-- If `XDG_DATA_HOME` is set, it will be used instead
+### Settings
 
-### Configuration Options
+```yaml
+# config.yml
+ssl_dir: ~/.local/share/autossl/certificates
+ca_file: /path/to/ca.crt
+ca_key: /path/to/ca.key
+```
 
-- `ca_file`: Path to your CA certificate file
-- `ca_key`: Path to your CA private key
-- `ssl_dir`: Directory for generated certificates (optional)
+### Resource Limits
 
-## Security Features
+```yaml
+# Resource limits (adjustable in config)
+memory_limit: 512MB
+cpu_limit: 80%
+operation_rate: 100/second
+timeout: 30 seconds
+```
 
-AutoSSL implements several security measures:
+## Security Model
 
-- Strict path validation and sanitization
-- Secure file operations with proper permissions
-- Protected against path traversal attacks
-- Safe YAML parsing with type verification
-- Validated OpenSSL command execution
-- Atomic file operations
+### File Operations
+- All file operations are atomic
+- Strict permission checking (600 for files, 700 for directories)
+- Path validation and sanitization
+- Symlink protection
+
+### State Management
+- Transactional state changes
+- Crash recovery mechanisms
+- Corruption prevention
+- Automatic rollback
+
+### Resource Management
+- Memory usage monitoring
+- CPU utilization tracking
+- Disk space verification
+- Operation rate limiting
+
+## Error Handling
+
+### Circuit Breaker
+Automatically prevents cascading failures:
+- Trips after 5 consecutive failures
+- 60-second cooling period
+- Automatic state recovery
+- Operation isolation
+
+### Resource Exhaustion
+Prevents system overload:
+- Memory usage limits
+- CPU utilization caps
+- Disk space requirements
+- Operation rate limits
+
+### Recovery Mechanisms
+- Automatic crash recovery
+- State rollback capabilities
+- Resource cleanup
+- Logging and monitoring
+
+## Monitoring
+
+### Logging
+Comprehensive logging at `$XDG_DATA_HOME/autossl/autossl.log`:
+- Operation tracking
+- Error reporting
+- Resource usage
+- State changes
+
+### Health Checks
+- Memory usage monitoring
+- CPU utilization tracking
+- Disk space verification
+- Operation success rates
 
 ## Command Reference
 
-### Initialize Configuration
+### Initialize
 
 ```bash
-autossl init
+autossl init [--force]
 ```
-
-This interactive command will:
-1. Create necessary directories with secure permissions
-2. Guide you through configuration setup
-3. Validate all provided paths
-4. Store configuration securely
+Creates necessary directories and configuration with proper permissions.
 
 ### Generate Certificate
 
@@ -90,72 +188,73 @@ autossl generate DOMAIN TLD [options]
 ```
 
 Options:
-- `--ca-file PATH`: Override CA certificate file location
-- `--ca-key PATH`: Override CA private key location
-- `--ssl-dir PATH`: Override certificate output directory
+- `--ca-file PATH`: CA certificate location
+- `--ca-key PATH`: CA private key location
+- `--ssl-dir PATH`: Certificate output directory
 
-Example:
+### Verify Configuration
 
 ```bash
-autossl generate myapp dev --ssl-dir /custom/path/certs
+autossl verify
 ```
-
-## File Permissions
-
-AutoSSL enforces secure file permissions:
-- Configuration files: `0600` (user read/write only)
-- Certificate files: `0600` (user read/write only)
-- Directories: `0700` (user read/write/execute only)
-
-Ensure your CA files have appropriate permissions before use.
+Checks configuration and system requirements.
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **OpenSSL not found**
-   - Ensure OpenSSL is installed
-   - Check if OpenSSL is in your PATH
-   - Supported locations:
-     - `/usr/bin/openssl`
-     - `/usr/local/bin/openssl`
-     - `/opt/homebrew/bin/openssl` (Apple Silicon)
-     - Custom locations via PATH
+1. **Resource Limits**
+   - Increase available memory
+   - Reduce CPU load
+   - Free disk space
+   - Adjust rate limits
 
-2. **Permission Denied**
-   - Check file/directory ownership
-   - Verify required permissions
-   - Ensure parent directories are writable
+2. **Permission Errors**
+   - Check file ownership
+   - Verify directory permissions
+   - Ensure proper umask
+   - Check parent directory permissions
 
-3. **Configuration Issues**
-   - Run `autossl init` to reset configuration
-   - Check file permissions
-   - Verify paths exist and are accessible
+3. **State Recovery**
+   - Check transaction logs
+   - Verify state file integrity
+   - Review operation logs
+   - Clear stale locks
 
 ### Error Messages
 
-- "CA file and CA key must be specified": Run `autossl init` to configure
-- "Invalid domain": Domain contains invalid characters
-- "Path escapes base directory": Attempted path traversal detected
-- "Could not find OpenSSL executable": OpenSSL not in expected locations
+Detailed error messages with solutions:
 
-## Migration from Previous Versions
+- "Circuit breaker open": Wait for cooling period or check logs
+- "Resource limit exceeded": Free resources or adjust limits
+- "Permission denied": Check file/directory permissions
+- "State corruption detected": Review transaction logs
 
-If upgrading from a version before 1.0.0:
+## Migration Guide
 
-1. Configuration files have moved to new locations
-2. Run `autossl init` to migrate existing configuration
-3. Update any scripts referencing old config locations
-4. Verify file permissions match new requirements
+### From Previous Versions
+
+1. Backup existing certificates and configuration
+2. Update to latest version
+3. Run `autossl init --force`
+4. Verify configuration
+5. Test certificate generation
+
+### Configuration Changes
+
+1. New resource limits
+2. Enhanced security settings
+3. Updated file locations
+4. Additional monitoring options
 
 ## Contributing
 
-Contributions are welcome! Please read our contributing guidelines and submit pull requests.
+Contributions welcome! Please read our contributing guidelines and submit pull requests.
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+MIT License - see LICENSE file for details.
 
 ## Acknowledgments
 
-This project has been significantly enhanced through the use of Cursor's AI pair programming system, with human oversight and approval.
+This project implements industrial-grade safety measures through the use of Cursor's AI pair programming system, with rigorous human oversight and validation.

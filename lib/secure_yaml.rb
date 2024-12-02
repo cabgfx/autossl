@@ -1,10 +1,17 @@
 require "yaml"
+require "date"
 require_relative "safe_path"
+require "logger"
 
 module SecureYAML
   class Error < StandardError; end
 
   ALLOWED_CLASSES = [Symbol, Time, Date].freeze
+
+  # Initialize logger
+  def self.logger
+    @logger ||= Logger.new(File.join(SafePath.data_home, "autossl.log"))
+  end
 
   module_function
 
@@ -20,11 +27,13 @@ module SecureYAML
       aliases: false
     )
   rescue Psych::Exception => e
+    logger.error("YAML parsing error: #{e.message}")
     raise Error, "YAML parsing error: #{e.message}"
   end
 
   def dump(data, path, base_dir: nil, mode: 0o600)
     unless data.is_a?(Hash)
+      logger.error("Can only dump Hash objects, got: #{data.class}")
       raise Error, "Can only dump Hash objects, got: #{data.class}"
     end
 
@@ -33,6 +42,7 @@ module SecureYAML
 
     yaml_content = YAML.dump(data)
     SafePath.secure_write(path, yaml_content, mode: mode, base_dir: base_dir)
+    logger.info("Successfully dumped YAML to #{path}")
   end
 
   def verify_types(obj, path = [])
@@ -49,6 +59,7 @@ module SecureYAML
       # These types are allowed
     else
       location = path.empty? ? "root" : "at path: #{path.join(".")}"
+      logger.error("Unsupported type #{obj.class} #{location}")
       raise Error, "Unsupported type #{obj.class} #{location}"
     end
   end

@@ -1,4 +1,8 @@
 require "pathname"
+require_relative "safety_checks"
+require "logger"
+require "securerandom"
+require "fileutils"
 
 module SafePath
   class Error < StandardError; end
@@ -9,10 +13,25 @@ module SafePath
 
   class ValidationError < Error; end
 
+  DEFAULT_DIRECTORY_PERMISSIONS = 0o700
+  DEFAULT_FILE_PERMISSIONS = 0o600
+
   module_function
 
+  # Initialize logger
+  def logger
+    @logger ||= Logger.new(File.join(data_home, "autossl.log"))
+  end
+
+  def data_home
+    # Define the data home directory, adjust as needed
+    ENV["XDG_DATA_HOME"] || File.join(Dir.home, ".local", "share")
+  end
+
   def validate_path(path, base_dir = nil)
+    # Initial path normalization
     path = Pathname.new(path).cleanpath
+    SafetyChecks.validate_path_length!(path)
 
     # Convert to absolute path if relative
     unless path.absolute?
@@ -23,72 +42,96 @@ module SafePath
 
     # Resolve symlinks and normalize
     real_path = begin
-      path.realpath
+      SafetyChecks.check_symlink!(path)
     rescue
-      nil
+      raise SecurityError, "Path contains symbolic links or is invalid: #{path}"
     end
-    raise ValidationError, "Path does not exist or is not accessible: #{path}" unless real_path
 
-    # If base_dir provided, ensure path is contained within it
     if base_dir
-      base_real = begin
-        Pathname.new(base_dir).realpath
-      rescue
-        nil
-      end
-      raise ValidationError, "Base directory is invalid: #{base_dir}" unless base_real
-      unless real_path.to_s.start_with?(base_real.to_s)
-        raise PathTraversalError, "Path escapes base directory: #{path}"
+      begin
+        SafetyChecks.validate_in_directory!(real_path, base_dir)
+      rescue SafetyChecks::SecurityError => e
+        logger.error("Path traversal attempt: #{e.message}")
+        raise PathTraversalError, e.message
       end
     end
 
     real_path
   end
 
-  def secure_write(path, content, mode: 0o600, base_dir: nil)
-    path = validate_path(path, base_dir)
+  def secure_write(path, content, mode: DEFAULT_FILE_PERMISSIONS, base_dir: nil)
+    validate_path(path, base_dir)
+    temp_path = path.sub_ext(".tmp#{SecureRandom.uuid}")
 
-    # Ensure parent directory exists and is writable
-    parent = path.parent
-    unless parent.directory? && parent.writable?
-      raise PermissionError, "Parent directory is not writable: #{parent}"
+    File.open(temp_path, File::CREAT | File::EXCL | File::WRONLY, mode) do |f|
+      f.flock(File::LOCK_EX)
+      f.write(content)
+      f.flush
+      f.fsync # Ensure content is written to disk
+      f.flock(File::LOCK_UN)
     end
 
-    # Write to temporary file first
-    temp_path = path.sub_ext(".tmp" + Random.rand(100000).to_s)
-    begin
-      File.open(temp_path, File::CREAT | File::EXCL | File::WRONLY, mode) do |f|
-        f.write(content)
-        f.flush
-        f.fsync # Ensure content is written to disk
-      end
+    # Verify temp file permissions and ownership
+    SafetyChecks.validate_permissions!(temp_path, mode)
+    SafetyChecks.validate_ownership!(temp_path)
 
-      # Atomic rename
-      File.rename(temp_path, path)
-    ensure
-      File.unlink(temp_path) if File.exist?(temp_path)
-    end
-
-    path
+    # Atomic rename
+    File.rename(temp_path, path)
+    logger.info("Successfully wrote to #{path}")
+  rescue => e
+    logger.error("Failed to write to #{path}: #{e.message}")
+    raise
+  ensure
+    File.unlink(temp_path) if File.exist?(temp_path)
   end
 
   def secure_read(path, base_dir: nil)
-    path = validate_path(path, base_dir)
+    validate_path(path, base_dir)
 
     unless path.readable?
+      logger.error("File is not readable: #{path}")
       raise PermissionError, "File is not readable: #{path}"
     end
 
+    # Verify it's a regular file with proper permissions
+    unless SafetyChecks.secure_file?(path)
+      logger.error("File has insecure permissions or is not a regular file: #{path}")
+      raise SecurityError, "File has insecure permissions or is not a regular file: #{path}"
+    end
+
+    logger.info("Reading file: #{path}")
     File.read(path)
+  rescue Errno::ENOENT
+    logger.error("File not found: #{path}")
+    raise
+  rescue Errno::EACCES
+    logger.error("Permission denied reading file: #{path}")
+    raise
+  rescue => e
+    logger.error("Failed to read file #{path}: #{e.message}")
+    raise
   end
 
-  def secure_mkdir(path, mode: 0o700, base_dir: nil)
-    # For directories, we need to validate the parent first
+  def secure_mkdir(path, mode: DEFAULT_DIRECTORY_PERMISSIONS, base_dir: nil)
+    # For directories, validate the parent first
     parent = Pathname.new(path).parent
     validate_path(parent, base_dir) if base_dir
 
+    # Check available space
+    SafetyChecks.validate_available_space!(parent)
+
+    # Create directory with secure permissions
     FileUtils.mkdir_p(path, mode: mode)
-    validate_path(path, base_dir) # Validate the created directory
+    logger.info("Created directory: #{path}")
+
+    # Validate the created directory
+    created_path = validate_path(path, base_dir)
+    SafetyChecks.validate_permissions!(created_path, mode)
+    SafetyChecks.validate_ownership!(created_path)
+
+    created_path
+  rescue Errno::EEXIST
+    logger.warn("Directory already exists: #{path}")
   end
 
   def within_base_dir?(path, base_dir)

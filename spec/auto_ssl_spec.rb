@@ -8,56 +8,51 @@ RSpec.describe AutoSSL do
   let(:domain) { "example" }
   let(:tld) { "com" }
   let(:site) { "dev.#{domain}.#{tld}" }
-  let(:temp_dir) do
-    path = Dir.mktmpdir
-    Pathname.new(path).realpath.to_s  # Resolve any symlinks to actual path
-  end
+  let(:temp_dir) { Pathname.new(Dir.mktmpdir).realpath.to_s }
   let(:ssl_dir) { File.join(temp_dir, "ssl") }
-  let(:ca_file) { "/path/to/yourCA.pem" }
-  let(:ca_key) { "/path/to/yourCA.key" }
+  let(:ca_file) { File.join(temp_dir, "ca.pem") }
+  let(:ca_key) { File.join(temp_dir, "ca.key") }
   let(:config_file) { File.join(temp_dir, ".autosslrc") }
 
   before do
-    # Safety checks
-    unless temp_dir.start_with?(Dir.tmpdir)
-      raise "Safety check failed: temp_dir '#{temp_dir}' not in system temp directory '#{Dir.tmpdir}'"
-    end
+    # Create test CA files
+    FileUtils.mkdir_p(File.dirname(ca_file))
+    File.write(ca_file, "test ca content")
+    File.write(ca_key, "test key content")
+    File.chmod(0o600, ca_file)
+    File.chmod(0o600, ca_key)
 
-    # Verify all paths are within temp_dir
-    [ssl_dir, config_file].each do |path|
-      full_path = Pathname.new(path).cleanpath.to_s
-      unless full_path.start_with?(temp_dir)
-        raise "Safety check failed: path '#{full_path}' escapes temp directory '#{temp_dir}'"
-      end
-    end
-
-    # Create ssl directory with explicit permissions
+    # Create ssl directory with proper permissions
     FileUtils.mkdir_p(ssl_dir, mode: 0o700)
 
     # Stub CONFIG_FILE constant to use our temporary location
     stub_const("AutoSSL::CONFIG_FILE", config_file)
 
-    # Mock the system calls to OpenSSL to avoid actual key generation
-    allow_any_instance_of(CertManager).to receive(:system).and_return(true)
+    # Mock OpenSSL commands
+    allow(SecureCommand).to receive(:openssl) do |*args, **kwargs|
+      # Create a dummy file if it's a command that generates output
+      if args.include?("-out")
+        out_file = args[args.index("-out") + 1]
+        out_path = kwargs[:working_dir] ? File.join(kwargs[:working_dir], out_file) : out_file
+        FileUtils.touch(out_path)
+        File.chmod(0o600, out_path)
+      end
+      true
+    end
   end
 
   after do
+    # Clean up temp directory safely
     if Dir.exist?(temp_dir)
       begin
-        # Ensure we're only removing files we created in our temp directory
-        dir_path = Pathname.new(temp_dir).realpath
-        unless dir_path.to_s.start_with?(Dir.tmpdir)
-          raise "Safety check failed: attempting to remove directory outside tmp"
-        end
+        real_temp = Pathname.new(temp_dir).realpath.to_s
+        real_tmpdir = Pathname.new(Dir.tmpdir).realpath.to_s
 
-        # Safely remove only files we own
-        Dir.glob(File.join(temp_dir, "**/*")).each do |path|
-          next unless File.owned?(path)
-          File.unlink(path) if File.file?(path)
+        if real_temp.start_with?(real_tmpdir)
+          FileUtils.remove_entry(temp_dir)
+        else
+          warn "Warning: Not removing directory that's outside tmp: #{temp_dir}"
         end
-
-        # Remove empty directories
-        FileUtils.remove_entry(temp_dir)
       rescue => e
         warn "Warning: Failed to clean up temp directory #{temp_dir}: #{e.message}"
       end
@@ -70,18 +65,32 @@ RSpec.describe AutoSSL do
     end
 
     it "generates a private key" do
-      expect_any_instance_of(CertManager).to receive(:generate_private_key)
+      expect(SecureCommand).to receive(:openssl).with(
+        "genrsa",
+        "-out", "#{site}.key",
+        "2048",
+        working_dir: ssl_dir
+      )
       AutoSSL.start(["generate", domain, tld])
     end
 
     it "generates a CSR" do
-      expect_any_instance_of(CertManager).to receive(:generate_csr)
+      expect(SecureCommand).to receive(:openssl).with(
+        "req",
+        "-new",
+        "-key", "#{site}.key",
+        "-out", "#{site}.csr",
+        "-subj", "/CN=#{site}/emailAddress=example@example.com",
+        working_dir: ssl_dir
+      )
       AutoSSL.start(["generate", domain, tld])
     end
 
     it "creates an ext file with the correct content" do
+      allow(SecureCommand).to receive(:openssl).and_return(true)
       AutoSSL.start(["generate", domain, tld])
-      ext_file = File.read(File.join(ssl_dir, "#{site}.ext"))
+      ext_file = File.join(ssl_dir, "#{site}.ext")
+      expect(File.exist?(ext_file)).to be true
 
       expected_content = <<~EXT
         authorityKeyIdentifier=keyid,issuer
@@ -93,11 +102,23 @@ RSpec.describe AutoSSL do
         DNS.1 = #{site}
       EXT
 
-      expect(ext_file).to eq(expected_content)
+      expect(File.read(ext_file)).to eq(expected_content)
     end
 
     it "generates a certificate" do
-      expect_any_instance_of(CertManager).to receive(:generate_certificate)
+      expect(SecureCommand).to receive(:openssl).with(
+        "x509",
+        "-req",
+        "-in", "#{site}.csr",
+        "-CA", ca_file,
+        "-CAkey", ca_key,
+        "-CAcreateserial",
+        "-out", "#{site}.crt",
+        "-days", "825",
+        "-sha256",
+        "-extfile", "#{site}.ext",
+        working_dir: ssl_dir
+      )
       AutoSSL.start(["generate", domain, tld])
     end
 

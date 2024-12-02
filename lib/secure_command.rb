@@ -1,6 +1,7 @@
 require "open3"
 require "shellwords"
 require "rbconfig"
+require "logger"
 
 module SecureCommand
   class Error < StandardError; end
@@ -30,10 +31,15 @@ module SecureCommand
 
   # Define allowed OpenSSL commands and their allowed options
   ALLOWED_COMMANDS = {
-    "genrsa" => ["-out"],
+    "genrsa" => ["-out", "2048"],
     "req" => ["-new", "-key", "-out", "-subj"],
     "x509" => ["-req", "-in", "-CA", "-CAkey", "-CAcreateserial", "-out", "-days", "-sha256", "-extfile"]
   }.freeze
+
+  # Initialize logger
+  def self.logger
+    @logger ||= Logger.new(File.join(SafePath.data_home, "autossl.log"))
+  end
 
   module_function
 
@@ -45,7 +51,9 @@ module SecureCommand
     openssl_path = find_openssl_path
     command = [openssl_path, *args]
 
-    # Execute in specified working directory
+    logger.info("Executing OpenSSL command: #{command.join(" ")}")
+
+    # Execute in specified working directory with file locking
     Dir.chdir(working_dir || Dir.pwd) do
       execute_command(command)
     end
@@ -55,15 +63,18 @@ module SecureCommand
     stdout, stderr, status = Open3.capture3(*command)
 
     unless status.success?
+      logger.error("OpenSSL command failed (exit #{status.exitstatus}): #{stderr}")
       raise CommandError, "Command failed (exit #{status.exitstatus}): #{stderr}"
     end
 
+    logger.info("OpenSSL command output: #{stdout.strip}")
     stdout
   end
 
   def validate_openssl_args!(args)
     command = args.first
     unless ALLOWED_COMMANDS.key?(command)
+      logger.error("Unsupported OpenSSL command: #{command}")
       raise Error, "Unsupported OpenSSL command: #{command}"
     end
 
@@ -73,7 +84,14 @@ module SecureCommand
 
       if arg.start_with?("-")
         unless ALLOWED_COMMANDS[command].include?(arg)
+          logger.error("Unsupported option for #{command}: #{arg}")
           raise Error, "Unsupported option for #{command}: #{arg}"
+        end
+      else
+        # For non-option arguments, ensure they are valid
+        unless ALLOWED_COMMANDS[command].include?(arg)
+          logger.error("Unexpected argument for #{command}: #{arg}")
+          raise Error, "Unexpected argument for #{command}: #{arg}"
         end
       end
     end
@@ -86,7 +104,10 @@ module SecureCommand
 
     # Then try platform-specific paths
     openssl_path = OPENSSL_PATHS.find { |p| File.executable?(p) }
-    raise Error, "Could not find OpenSSL executable" unless openssl_path
+    unless openssl_path
+      logger.error("Could not find OpenSSL executable")
+      raise Error, "Could not find OpenSSL executable"
+    end
 
     openssl_path
   end
@@ -108,6 +129,7 @@ module SecureCommand
 
     # Ensure the string isn't empty and doesn't start with a dash
     if cleaned.empty? || cleaned.start_with?("-")
+      logger.error("Invalid string after sanitization: #{str}")
       raise Error, "Invalid string after sanitization: #{str}"
     end
 

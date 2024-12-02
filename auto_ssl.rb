@@ -4,9 +4,15 @@ require_relative "lib/cert_manager"
 require_relative "lib/safe_path"
 require_relative "lib/secure_yaml"
 require "rbconfig"
+require "logger"
 
 class AutoSSL < Thor
   class Error < StandardError; end
+
+  # Initialize logger
+  def self.logger
+    @logger ||= Logger.new(File.join(data_home, "autossl.log"))
+  end
 
   # Platform-aware configuration paths
   def self.config_home
@@ -61,9 +67,11 @@ class AutoSSL < Thor
       cert_manager = CertManager.new(site, ca_file, ca_key, ssl_dir)
       cert_manager.generate_certificates
 
+      logger.info("Successfully generated certificates for #{site} in #{ssl_dir}")
       puts "Successfully generated certificates for #{site} in #{ssl_dir}"
     rescue => e
       error_message = "Certificate generation failed: #{e.message}"
+      logger.error(error_message)
       raise Thor::Error, error_message
     end
   end
@@ -86,9 +94,11 @@ class AutoSSL < Thor
     # Save configuration
     save_config(config)
 
+    logger.info("Configuration saved to #{CONFIG_FILE}")
     puts "Configuration saved to #{CONFIG_FILE}"
   rescue => e
     error_message = "Configuration failed: #{e.message}"
+    logger.error(error_message)
     raise Thor::Error, error_message
   end
 
@@ -98,12 +108,18 @@ class AutoSSL < Thor
 
   private
 
+  def logger
+    self.class.logger
+  end
+
   def validate_input!(domain, tld)
     unless domain.match?(/\A[a-z0-9][a-z0-9-]*[a-z0-9]\z/i)
+      logger.error("Invalid domain: #{domain}")
       raise Error, "Invalid domain: #{domain}"
     end
 
     unless tld.match?(/\A[a-z]{2,}\z/i)
+      logger.error("Invalid TLD: #{tld}")
       raise Error, "Invalid TLD: #{tld}"
     end
   end
@@ -113,6 +129,7 @@ class AutoSSL < Thor
 
     expanded_path = File.expand_path(path)
     unless File.exist?(expanded_path)
+      logger.error("#{description} not found: #{path}")
       raise Error, "#{description} not found: #{path}"
     end
 
@@ -136,14 +153,16 @@ class AutoSSL < Thor
     return {} unless File.exist?(CONFIG_FILE)
 
     begin
-      SecureYAML.load_file(CONFIG_FILE)
+      SecureYAML.load_file(CONFIG_FILE, base_dir: File.dirname(CONFIG_FILE))
     rescue => e
+      logger.error("Failed to load config: #{e.message}")
       raise Error, "Failed to load config: #{e.message}"
     end
   end
 
   def save_config(config)
-    SecureYAML.dump(config, CONFIG_FILE, mode: 0o600)
+    SecureYAML.dump(config, CONFIG_FILE, base_dir: File.dirname(CONFIG_FILE), mode: 0o600)
+    logger.info("Successfully saved configuration to #{CONFIG_FILE}")
   end
 
   def validate_config!(config)
@@ -154,12 +173,14 @@ class AutoSSL < Thor
       case key
       when "ca_file", "ca_key"
         unless File.file?(path) && File.readable?(path)
+          logger.error("#{key.tr("_", " ").capitalize} is not accessible: #{path}")
           raise Error, "#{key.tr("_", " ").capitalize} is not accessible: #{path}"
         end
       when "ssl_dir"
         # Directory will be created if it doesn't exist
         parent_dir = File.dirname(path)
         unless File.directory?(parent_dir) && File.writable?(parent_dir)
+          logger.error("Parent directory for SSL directory is not writable: #{parent_dir}")
           raise Error, "Parent directory for SSL directory is not writable: #{parent_dir}"
         end
       end

@@ -2,24 +2,43 @@ require "rspec"
 require "fileutils"
 require "tmpdir"
 require "yaml"
+require "pathname"
 
 RSpec.configure do |config|
   config.before(:each) do
-    @original_autosslrc = File.exist?(".autosslrc") ? File.read(".autosslrc") : nil
-    @tmp_ssl_dir = Dir.mktmpdir("build")
-
-    # Create a temporary .autosslrc file for the test
-    File.write(".autosslrc", {"ssl_dir" => @tmp_ssl_dir, "ca_file" => "/path/to/yourCA.pem", "ca_key" => "/path/to/yourCA.key"}.to_yaml)
+    # Ensure we're using a clean environment for each test
+    @original_env = ENV.to_h
+    ENV["XDG_CONFIG_HOME"] = Dir.mktmpdir("config")
+    ENV["XDG_DATA_HOME"] = Dir.mktmpdir("data")
   end
 
   config.after(:each) do
-    FileUtils.rm_rf(@tmp_ssl_dir) if @tmp_ssl_dir
+    # Clean up temporary directories
+    [ENV["XDG_CONFIG_HOME"], ENV["XDG_DATA_HOME"]].each do |dir|
+      if dir && Dir.exist?(dir)
+        begin
+          real_dir = Pathname.new(dir).realpath.to_s
+          real_tmpdir = Pathname.new(Dir.tmpdir).realpath.to_s
 
-    # Restore the original .autosslrc file
-    if @original_autosslrc
-      File.write(".autosslrc", @original_autosslrc)
-    elsif File.exist?(".autosslrc")
-      File.delete(".autosslrc")
+          if real_dir.start_with?(real_tmpdir)
+            FileUtils.remove_entry(dir)
+          else
+            warn "Warning: Not removing directory that's outside tmp: #{dir}"
+          end
+        rescue => e
+          warn "Warning: Failed to clean up directory #{dir}: #{e.message}"
+        end
+      end
     end
+
+    # Restore original environment
+    ENV.clear
+    @original_env.each { |k, v| ENV[k] = v }
+  end
+
+  # Disable real OpenSSL operations during testing
+  config.before(:each) do
+    allow(SecureCommand).to receive(:openssl).and_return(true) unless RSpec.current_example.metadata[:no_mock_openssl]
+    allow(File).to receive(:chmod).and_return(true) unless RSpec.current_example.metadata[:no_mock_chmod]
   end
 end
